@@ -6,7 +6,7 @@ from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import neptune.new as neptune
-from random import random 
+from random import random
 
 def ensure_download(remote_name, local_name=None):
     if local_name not in os.listdir():
@@ -20,11 +20,15 @@ def dataset(name):
     elif name == 'dataset_v2':
         ensure_download('dataset_v2', 'dataset_v2.p')
         return torch.load('dataset_v2.p')
+    elif name == 'dataset_v2_overfit':
+        return [dataset('dataset_v2')[0][:, ::100]]
     else:
         assert False, f'unknown dataset {name}'
 
-def dataloader(*, data=None, batch_size=None, shuffle=True, num_workers=2, **ignore):
-    return DataLoader(dataset(data), batch_size=batch_size, shuffle=shuffle, num_workers=num_workers,  pin_memory=False)
+def dataloader(*, data=None, batch_size=None, shuffle=True, num_workers=0, pin_memory=False, **ignore):
+    if data == 'dataset_v2_overfit':
+        return dataset('dataset_v2_overfit')
+    return DataLoader(dataset(data), batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=pin_memory)
 
 def model_optim_sched(*, device=None, model_loader=None, optim_loader=None, sched_loader='sch.ExponentialLR(o, 1.0)', **params):
     from models import ConvDummy, Conv1dAE, Conv1dVAE
@@ -55,10 +59,12 @@ def criterion(*, k_mse=None, k_kl=None, **ignore):
 def logger(*, console=None, save_rate=None, **ignore):
     if console:
         def result(*, epoch=None, last_batch=None, losses=None, model=None):
+            print()
             print(f'Epoch: {epoch:.2f}', end='\t')
             for part, value in losses.items():
                 print(f'{part}: {value}', end=' ')
-            if random() < save_rate or last_batch:
+            print(flush=True)
+            if save_rate is not None and (random() < save_rate or last_batch):
                 filename = f'model_{epoch}'
                 torch.save(model.state_dict(), filename + '.p')
         return result
@@ -71,7 +77,7 @@ def logger(*, console=None, save_rate=None, **ignore):
     def result(*, epoch=None, last_batch=None, losses=None, model=None):
         for part, value in losses.items():
            run[part].log(value)
-        if random() < save_rate or last_batch:
+        if save_rate is not None and (random() < save_rate or last_batch):
             filename = f'model_{epoch}'
             torch.save(model.state_dict(), filename + '.p')
             run[filename].upload(filename + '.p')

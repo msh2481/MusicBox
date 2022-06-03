@@ -4,11 +4,12 @@ from torch import nn, optim
 class ConvDummy(nn.Module):
     def __init__(self, channels):
         super().__init__()
-        self.conv = nn.Conv1d(channels, channels, kernel_size=1, groups=channels)
+        self.encoder = nn.Conv1d(channels, channels, kernel_size=1, padding='same', groups=channels, bias=False)
+        self.decoder = nn.Conv1d(channels, channels, kernel_size=1, padding='same', groups=channels, bias=False)
     def encode(self, x):
-        return self.conv(x), None
+        return self.encoder(x), None
     def decode(self, x, ignore):
-        return self.conv(x)
+        return self.decoder(x)
 
 def conv1dblock(channels_list, kernel_size, transpose):
     result = []
