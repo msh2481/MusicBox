@@ -155,7 +155,7 @@ class TrainAE(unittest.TestCase):
             'k_mse': 1,
             'k_kl': None,
 
-            'console': True,
+            'console': False,
             'save_rate': None
         })
         # mse ~ 0.01 after 500 epochs

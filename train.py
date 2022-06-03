@@ -24,5 +24,3 @@ def trainVAE(*, device=None, loader=None, model=None, optim=None, sched=None, cr
             sched.step(sum(ls) / len(ls))
         else:
             sched.step()
-        for param_group in optim.param_groups:
-            print(param_group['lr'])
