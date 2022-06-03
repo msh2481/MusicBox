@@ -71,13 +71,13 @@ class DataLoaders(unittest.TestCase):
         dur = time() - t0
         self.assertLess(dur, 0.01)
 
-@unittest.skipIf(SKIP_WORKING, '')
+# @unittest.skipIf(SKIP_WORKING, '')
 class ModelOptimSched(unittest.TestCase):
     def testDummy(self):
         m, o, s = build.model_optim_sched(
             device='cpu', model_loader='ConvDummy(128)', optim_loader='opt.Adam(m.parameters())', sched_loader='sch.ExponentialLR(o, 1.0)')
         m.train()
-        self.assertEqual(sum(x.numel() for x in m.parameters()), 512)
+        self.assertEqual(sum(x.numel() for x in m.parameters()), 256)
         x = torch.randn((4, 128, 1025))
         z, aux = m.encode(x)
         self.assertEqual(z.dtype, x.dtype)
@@ -93,6 +93,7 @@ class ModelOptimSched(unittest.TestCase):
         m, o, s = build.model_optim_sched(
             device='cpu', model_loader='Conv1dAE([128, 10], 3)', optim_loader='opt.AdamW(m.parameters(), weight_decay=params["wd"])', wd=1e-6)
         m.train()
+        print(m)
         x = torch.randn((4, 128, 1025))
         z, aux = m.encode(x)
         self.assertTrue(aux is None)
@@ -113,7 +114,7 @@ class ModelOptimSched(unittest.TestCase):
         self.assertEqual(y.shape, x.shape)
         self.assertEqual(y.shape, x.shape)
 
-# @unittest.skipIf(SKIP_WORKING, '')
+@unittest.skipIf(SKIP_WORKING, '')
 class TrainAE(unittest.TestCase):
     @unittest.skipIf(SKIP_WORKING, '')
     def testDummy(self):
@@ -150,12 +151,13 @@ class TrainAE(unittest.TestCase):
             'batch_size': 10,
             'epochs': 500,
 
+            'device': 'cpu',
             'model_loader': 'Conv1dAE([128, 10], kernel_size=3)',
             'optim_loader': 'opt.Adam(m.parameters(), lr=0.01)',
             'k_mse': 1,
             'k_kl': None,
 
-            'console': False,
+            'console': True,
             'save_rate': None
         })
         # mse ~ 0.01 after 500 epochs

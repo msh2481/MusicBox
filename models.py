@@ -20,13 +20,13 @@ def conv1dblock(channels_list, kernel_size, transpose):
             result.append(nn.Conv1d(x, y, kernel_size=kernel_size, padding=1, bias=False))
         result.append(nn.BatchNorm1d(y))
         result.append(nn.LeakyReLU(0.2))
-    return nn.Sequential(*result[:-2])
+    return result[:-2]
 
 class Conv1dAE(nn.Module):
     def __init__(self, channels_list, kernel_size):
         super().__init__()
-        self.encoder = conv1dblock(channels_list, kernel_size, False)
-        self.decoder = conv1dblock(channels_list[::-1], kernel_size, True)
+        self.encoder = nn.Sequential(*conv1dblock(channels_list, kernel_size, False))
+        self.decoder = nn.Sequential(*conv1dblock(channels_list[::-1], kernel_size, True))
     def encode(self, x):
         return self.encoder(x), None
     def decode(self, z, ignore):
@@ -35,10 +35,10 @@ class Conv1dAE(nn.Module):
 class Conv1dVAE(nn.Module):
     def __init__(self, channels_list, kernel_size):
         super().__init__()
-        self.encoder = conv1dblock(channels_list[:-1], kernel_size, False)
-        self.mu_head = conv1dblock(channels_list[-2:], kernel_size, False)
-        self.ls_head = conv1dblock(channels_list[-2:], kernel_size, False)
-        self.decoder = conv1dblock(channels_list[::-1], kernel_size, True)
+        self.encoder = nn.Sequential(*conv1dblock(channels_list[:-1], kernel_size, False))
+        self.mu_head = nn.Sequential(*conv1dblock(channels_list[-2:], kernel_size, False))
+        self.ls_head = nn.Sequential(*conv1dblock(channels_list[-2:], kernel_size, False))
+        self.decoder = nn.Sequential(*conv1dblock(channels_list[::-1], kernel_size, True))
     def encode(self, x):
         z = self.encoder(x)
         return self.mu_head(z), self.ls_head(z)
