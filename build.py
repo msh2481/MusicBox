@@ -87,4 +87,4 @@ def run(cfg):
     from train import trainVAE
     trainer = eval(cfg['trainer'])
     m, o, s = model_optim_sched(**cfg)
-    trainer(loader=dataloader(**cfg), model=m, optim=o, sched=s, criterion=criterion(**cfg), logger=logger(**cfg), **cfg)
+    return trainer(loader=dataloader(**cfg), model=m, optim=o, sched=s, criterion=criterion(**cfg), logger=logger(**cfg), **cfg)

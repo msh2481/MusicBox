@@ -6,8 +6,9 @@ import torch
 import cProfile
 from time import time
 from itertools import islice, cycle
+import optuna 
 
-SKIP_WORKING = False
+SKIP_WORKING = True
 
 @unittest.skipIf(SKIP_WORKING, '')
 class Datasets(unittest.TestCase):
@@ -71,7 +72,7 @@ class DataLoaders(unittest.TestCase):
         dur = time() - t0
         self.assertLess(dur, 0.01)
 
-# @unittest.skipIf(SKIP_WORKING, '')
+@unittest.skipIf(SKIP_WORKING, '')
 class ModelOptimSched(unittest.TestCase):
     def testDummy(self):
         m, o, s = build.model_optim_sched(
@@ -116,7 +117,6 @@ class ModelOptimSched(unittest.TestCase):
 
 @unittest.skipIf(SKIP_WORKING, '')
 class TrainAE(unittest.TestCase):
-    @unittest.skipIf(SKIP_WORKING, '')
     def testDummy(self):
         build.run({
             'trainer': 'trainVAE',
@@ -142,7 +142,6 @@ class TrainAE(unittest.TestCase):
         # 20    0.005
         # 30    4e-6
     
-    # @unittest.skipIf(SKIP_WORKING, '')
     def testOverfit(self):
         build.run({
             'trainer': 'trainVAE',
@@ -161,6 +160,36 @@ class TrainAE(unittest.TestCase):
             'save_rate': None
         })
         # mse ~ 0.01 after 500 epochs
+
+class Optuna(unittest.TestCase):
+    def testDummy(self):
+        def objective(trial):
+            cfg = {
+                'trainer': 'trainVAE',
+                'data': 'dataset_v2',
+                'epochs': 3,
+                'device': 'cpu',
+                'optim_loader': 'opt.AdamW(m.parameters(), lr=params["lr"], weight_decay=params["wd"])',
+                'k_mse': 1.0,
+                'k_kl': None,
+                'console': False,
+                'save_rate': 0.0
+            }
+            cfg['batch_size'] = 2**trial.suggest_int('log_bs', 2, 6)
+            kernel_size = trial.suggest_int('ks', 3, 5)
+            if trial.suggest_categorical('layers', [1, 2]) == 1:
+                layer_1 = trial.suggest_int('layer_1', 8, 32, log=True)
+                cfg['model_loader'] = f'Conv1dAE([128, {layer_1}], kernel_size={kernel_size})'
+            else:
+                layer_1 = trial.suggest_int('layer_1', 32, 64, log=True)
+                layer_2 = trial.suggest_int('layer_2', 8, 32, log=True)
+                cfg['model_loader'] = f'Conv1dAE([128, {layer_1}, {layer_2}], kernel_size={kernel_size})'
+            
+            cfg['lr'] = trial.suggest_float('lr', 1e-4, 1e-2, log=True)
+            cfg['wd'] = trial.suggest_float('wd', 1e-6, 1e-2, log=True)
+            return build.run(cfg)
+        study = optuna.create_study(direction='minimize')
+        study.optimize(objective, n_trials=3)
 
 if __name__ == '__main__':
     unittest.main()
