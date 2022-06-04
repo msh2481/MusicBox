@@ -7,7 +7,7 @@ import cProfile
 from time import time
 from itertools import islice, cycle
 
-SKIP_WORKING = True
+SKIP_WORKING = False
 
 @unittest.skipIf(SKIP_WORKING, '')
 class Datasets(unittest.TestCase):
