@@ -43,6 +43,8 @@ class Conv1dVAE(nn.Module):
         z = self.encoder(x)
         return self.mu_head(z), self.ls_head(z)
     def sample(self, mu, logsigma):
+        if logsigma is None:
+            return mu
         assert mu.shape == logsigma.shape
         return mu + torch.randn_like(mu) * logsigma
     def decode(self, mu, logsigma):

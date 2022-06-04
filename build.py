@@ -1,4 +1,5 @@
 import os
+from matplotlib.cbook import ls_mapper
 import torch
 from torch import nn, optim as opt
 from torch.optim import lr_scheduler as sch
@@ -88,3 +89,18 @@ def run(cfg):
     trainer = eval(cfg['trainer'])
     m, o, s = model_optim_sched(**cfg)
     return trainer(loader=dataloader(**cfg), model=m, optim=o, sched=s, criterion=criterion(**cfg), logger=logger(**cfg), **cfg)
+
+def saved_model(run_name, checkpoint):
+    run = neptune.init(
+        project="mlxa/MusicBox",
+        api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI5NTIzY2UxZC1jMjI5LTRlYTQtYjQ0Yi1kM2JhMGU1NDllYTIifQ==",
+        run=run_name,
+        mode='read-only'
+    )
+    run[checkpoint].download('model.p')
+    params = run['params'].fetch()
+    params['device'] = 'cpu'
+    print(params)
+    model, _, _ = model_optim_sched(**params)
+    model.load_state_dict(torch.load('model.p', map_location='cpu'))
+    return model
