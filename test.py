@@ -8,7 +8,8 @@ from time import time
 from itertools import islice, cycle
 import optuna
 
-SKIP_WORKING = True
+SKIP_WORKING = False
+SKIP_MANUAL = True 
 
 @unittest.skipIf(SKIP_WORKING, '')
 class Datasets(unittest.TestCase):
@@ -91,7 +92,10 @@ class DataLoaders(unittest.TestCase):
         for batch in loader:
             pass
         dur = time() - t0
-        self.assertLess(dur, 0.2)
+        self.assertLess(dur, 0.5)
+
+def just_model(model_loader):
+    return build.model_optim_sched(device='cpu', model_loader=model_loader, optim_loader='None', sched_loader='None')[0]
 
 @unittest.skipIf(SKIP_WORKING, '')
 class ModelOptimSched(unittest.TestCase):
@@ -111,9 +115,10 @@ class ModelOptimSched(unittest.TestCase):
         o.step()
         s.step()
 
+# @unittest.skipIf(SKIP_WORKING, '')
+class Models(unittest.TestCase):
     def testConvAE(self):
-        m, o, s = build.model_optim_sched(
-            device='cpu', model_loader='Conv1dAE([128, 10], 5)', optim_loader='opt.AdamW(m.parameters(), weight_decay=params["wd"])', wd=1e-6)
+        m = just_model('Conv1dAE([128, 10], 5)')
         m.train()
         x = torch.randn((4, 128, 1025))
         z, aux = m.encode(x)
@@ -122,10 +127,11 @@ class ModelOptimSched(unittest.TestCase):
         y = m.decode(z, aux)
         self.assertEqual(y.shape, x.shape)
         self.assertEqual(y.dtype, x.dtype)
+        g = m.generate()
+        self.assertEqual(g.shape, x[0].shape)
 
     def testConvVAE(self):
-        m, o, s = build.model_optim_sched(
-            device='cpu', model_loader='Conv1dVAE([128, 10], 3)', optim_loader='opt.Adam(m.parameters())')
+        m = just_model('Conv1dVAE([128, 10], 3)')
         m.train()
         x = torch.randn((4, 128, 1025))
         z, aux = m.encode(x)
@@ -133,10 +139,11 @@ class ModelOptimSched(unittest.TestCase):
         self.assertEqual(z.shape, (4, 10, 1025))
         y = m.decode(z, aux)
         self.assertEqual(y.shape, x.shape)
+        g = m.generate()
+        self.assertEqual(g.shape, x[0].shape)
 
     def testConv2dVAE(self):
-        m, o, s = build.model_optim_sched(
-            device='cpu', model_loader='Conv2dVAE([1, 10], [(1, 1)], (7, 3))', optim_loader='opt.Adam(m.parameters())')
+        m = just_model('Conv2dVAE([1, 10], [(1, 1)], [(7, 3)])')
         m.train()
         x = torch.randn((4, 1, 128, 1024))
         z, aux = m.encode(x)
@@ -144,20 +151,22 @@ class ModelOptimSched(unittest.TestCase):
         self.assertEqual(z.shape, (4, 10, 128, 1024))
         y = m.decode(z, aux)
         self.assertEqual(y.shape, x.shape)
+        g = m.generate()
+        self.assertNotEqual(g.shape, x[0].shape)
 
     def testConv2dVAEWithStride(self):
-        m, o, s = build.model_optim_sched(
-            device='cpu', model_loader='Conv2dVAE([1, 10], [(2, 16)], (5, 9))', optim_loader='opt.Adam(m.parameters())')
+        m = just_model('Conv2dVAE([1, 10, 30, 100], [(2, 16), (8, 8), (8, 8)], [3, 3, 3])')
         m.train()
-        print(m)
         x = torch.randn((7, 1, 128, 1024))
         z, aux = m.encode(x)
         self.assertEqual(z.shape, aux.shape)
-        self.assertEqual(z.shape, (7, 10, 64, 64))
+        self.assertEqual(z.shape, (7, 100, 1, 1))
         y = m.decode(z, aux)
         self.assertEqual(y.shape, x.shape)
+        g = m.generate()
+        self.assertEqual(g.shape, x[0].shape)
 
-@unittest.skipIf(SKIP_WORKING, '')
+@unittest.skipIf(SKIP_MANUAL, '')
 class TrainAE(unittest.TestCase):
     def testDummy(self):
         build.run({
@@ -204,7 +213,7 @@ class TrainAE(unittest.TestCase):
         # mse ~ 0.01 after 500 epochs
 
 
-@unittest.skipIf(SKIP_WORKING, '')
+@unittest.skipIf(SKIP_MANUAL, '')
 class Optuna(unittest.TestCase):
     def testDummy(self):
         def objective(trial):

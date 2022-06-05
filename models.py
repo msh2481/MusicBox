@@ -32,10 +32,17 @@ def conv1dblock(channels_list, kernel_size, transpose):
         result.append(nn.LeakyReLU(0.2))
     return result[:-2]
 
+class Generatable:
+    def generate(self):
+        self.eval()
+        device = next(iter(self.decoder.parameters())).device
+        z = torch.randn(self.z_shape, device=device)
+        return self.decode(z.unsqueeze(0), None).squeeze(0)
 
-class Conv1dAE(nn.Module):
+class Conv1dAE(nn.Module, Generatable):
     def __init__(self, channels_list, kernel_size):
         super().__init__()
+        self.z_shape = (channels_list[-1], 1025)
         self.encoder = nn.Sequential(
             *conv1dblock(channels_list, kernel_size, False))
         self.decoder = nn.Sequential(
@@ -47,10 +54,10 @@ class Conv1dAE(nn.Module):
     def decode(self, z, ignore):
         return self.decoder(z)
 
-
-class Conv1dVAE(nn.Module):
+class Conv1dVAE(nn.Module, Generatable):
     def __init__(self, channels_list, kernel_size):
         super().__init__()
+        self.z_shape = (channels_list[-1], 1025)
         self.encoder = nn.Sequential(
             *conv1dblock(channels_list[:-1], kernel_size, False))
         self.mu_head = nn.Sequential(
@@ -75,14 +82,18 @@ class Conv1dVAE(nn.Module):
         return self.decoder(z)
 
 
-def conv2dblock(channels_list, strides_list, kernel_size, transpose):
-    assert all(sz % 2 == 1 for sz in kernel_size)
+def conv2dblock(channels_list, strides_list, kernel_sizes, transpose):
     assert len(strides_list) == len(channels_list) - 1
-    padding = tuple([sz // 2 for sz in kernel_size])
+    assert len(kernel_sizes) == len(channels_list) - 1
     result = []
     for i in range(len(channels_list) - 1):
-        x, y = channels_list[i], channels_list[i + 1]
         stride = strides_list[i]
+        kernel_size = kernel_sizes[i]
+        if isinstance(kernel_size, int):
+            kernel_size = (kernel_size, kernel_size)
+        x, y = channels_list[i], channels_list[i + 1]
+        assert all(sz % 2 == 1 for sz in kernel_size)
+        padding = tuple([sz // 2 for sz in kernel_size])
         if transpose:
             output_padding = tuple([stride[i] - kernel_size[i] % 2 for i in range(len(kernel_size))])
             result.append(nn.ConvTranspose2d(x, y, kernel_size=kernel_size, stride=stride,
@@ -90,22 +101,23 @@ def conv2dblock(channels_list, strides_list, kernel_size, transpose):
         else:
             result.append(nn.Conv2d(x, y, kernel_size=kernel_size,
                           padding=padding, stride=stride, bias=False))
-        result.append(nn.BatchNorm1d(y))
+        result.append(nn.BatchNorm2d(y))
         result.append(nn.LeakyReLU(0.2))
     return result[:-2]
 
 
-class Conv2dVAE(nn.Module):
-    def __init__(self, channels_list, strides_list, kernel_size):
+class Conv2dVAE(nn.Module, Generatable):
+    def __init__(self, channels_list, strides_list, kernel_sizes):
         super().__init__()
+        self.z_shape = (channels_list[-1], 1, 1)
         self.encoder = nn.Sequential(
-            *conv2dblock(channels_list[:-1], strides_list[:-1], kernel_size, False))
+            *conv2dblock(channels_list[:-1], strides_list[:-1], kernel_sizes[:-1], False))
         self.mu_head = nn.Sequential(
-            *conv2dblock(channels_list[-2:], strides_list[-1:], kernel_size, False))
+            *conv2dblock(channels_list[-2:], strides_list[-1:], kernel_sizes[-1:], False))
         self.ls_head = nn.Sequential(
-            *conv2dblock(channels_list[-2:], strides_list[-1:], kernel_size, False))
+            *conv2dblock(channels_list[-2:], strides_list[-1:], kernel_sizes[-1:], False))
         self.decoder = nn.Sequential(
-            *conv2dblock(channels_list[::-1], strides_list[::-1], kernel_size, True))
+            *conv2dblock(channels_list[::-1], strides_list[::-1], kernel_sizes[::-1], True))
 
     def encode(self, x):
         z = self.encoder(x)

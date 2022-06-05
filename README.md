@@ -13,4 +13,5 @@ Other optimizers
 Conditional models
 GAN
 Additional model for Spec -> Wave
+Iterative inference?
 LSTM and other sequence models

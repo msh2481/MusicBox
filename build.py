@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import neptune.new as neptune
 from random import random
+import matplotlib.pyplot as plt 
 
 def ensure_download(remote_name, local_name=None):
     if local_name not in os.listdir():
@@ -62,32 +63,51 @@ def criterion(*, k_mse=None, k_kl=None, **ignore):
             return k_mse * mse + k_kl * kl, {'mse': mse, 'kl': kl}
         return result
 
-def logger(*, console=None, save_rate=None, **ignore):
-    if console:
-        def result(*, epoch=None, last_batch=None, losses=None, model=None):
-            print()
-            print(f'Epoch: {epoch:.2f}', end='\t')
-            for part, value in losses.items():
-                print(f'{part}: {value}', end=' ')
-            print(flush=True)
-            if save_rate is not None and (random() < save_rate or last_batch):
-                filename = f'model_{epoch}'
-                torch.save(model.state_dict(), filename + '.p')
-        return result
-    
-    run = neptune.init(
-        project="mlxa/MusicBox",
-        api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI5NTIzY2UxZC1jMjI5LTRlYTQtYjQ0Yi1kM2JhMGU1NDllYTIifQ==",
-    )
-    run['params'] = dict(**ignore, save_rate=None)
-    def result(*, epoch=None, last_batch=None, losses=None, model=None):
+class BaseLogger:
+    def __init__(self, save_rate=None, sample_rate=None, **ignore):
+        self.save_rate = save_rate 
+        self.sample_rate = sample_rate
+    def __call__(self, epoch=None, last_batch=None, losses=None, model=None):
+        self.show_losses(epoch, losses)
+        if self.save_rate is not None and (random() < self.save_rate or last_batch):
+            name = f'model_{epoch}'
+            torch.save(model.state_dict(), name + '.p')
+            self.upload(name, name + '.p')
+        if self.sample_rate is not None and (random() < self.sample_rate or last_batch):
+            name = f'sample_{epoch}'
+            sample = model.generate().detach().cpu().flatten(start_dim=0, end_dim=-2)
+            plt.imshow(sample)
+            plt.savefig(name + '.jpg')
+            self.upload(name, name + '.jpg')
+
+class ConsoleLogger(BaseLogger):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+    def show_losses(self, epoch, losses):
+        print()
+        print(f'Epoch: {epoch:.2f}', end='\t')
         for part, value in losses.items():
-           run[part].log(value)
-        if save_rate is not None and (random() < save_rate or last_batch):
-            filename = f'model_{epoch}'
-            torch.save(model.state_dict(), filename + '.p')
-            run[filename].upload(filename + '.p')
-    return result
+            print(f'{part}: {value}', end=' ')
+        print(flush=True)
+    def upload(self, name, filename):
+        pass
+
+class NeptuneLogger(BaseLogger):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.run = neptune.init(
+            project="mlxa/MusicBox",
+            api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI5NTIzY2UxZC1jMjI5LTRlYTQtYjQ0Yi1kM2JhMGU1NDllYTIifQ==",
+        )
+        self.run['params'] = dict(**kwargs)
+    def show_losses(self, losses):
+        for name, value in losses.items():
+            self.run[name].log(value)
+    def upload(self, name, filename):
+        self.run[name].upload(filename)
+
+def logger(*, console=None, save_rate=None, sample_rate=None, **ignore):
+    return ConsoleLogger() if console else NeptuneLogger()
 
 def run(cfg):
     from train import trainVAE
