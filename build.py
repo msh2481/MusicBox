@@ -21,14 +21,16 @@ def dataset(name):
         return datasets.MNIST(root='mnist', train=True, transform=transforms.Compose([transforms.ToTensor(), transforms.Resize(32)]), download=True)
     elif name == 'dataset_v2':
         ensure_download('dataset_v2', 'dataset_v2.p')
-        return torch.load('dataset_v2.p')
+        X = torch.load('dataset_v2.p')
+        return [(X[i], 0) for i in range(len(X))]
     elif name == 'dataset_v2_overfit':
-        return [dataset('dataset_v2')[0][:, ::100]]
+        X = dataset('dataset_v2')[0][0][:, ::100]
+        return [(X, 0)]
     elif name == 'dataset_v3':
         ensure_download('X_v3', 'X_v3.p')
         ensure_download('y_v3', 'y_v3.p')
         X, y = torch.load('X_v3.p'), torch.load('y_v3.p')
-        return [(X[i], y[i]) for i in range(1000)]
+        return [(X[i].unsqueeze(0), y[i]) for i in range(len(X))]
     else:
         assert False, f'unknown dataset {name}'
 
@@ -52,12 +54,12 @@ def kl_div(mu, logsigma):
 def criterion(*, k_mse=None, k_kl=None, **ignore):
     if k_kl is None:
         assert k_mse is not None
-        def result(input, target, aux):
+        def result(input, target, aux, info):
             mse = F.mse_loss(input, target)
             return k_mse * mse, {'mse': mse}
         return result
     else:
-        def result(input, target, aux):
+        def result(input, target, aux, info):
             mse = F.mse_loss(input, target)
             kl = kl_div(input, aux)
             return k_mse * mse + k_kl * kl, {'mse': mse, 'kl': kl}
@@ -100,14 +102,14 @@ class NeptuneLogger(BaseLogger):
             api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI5NTIzY2UxZC1jMjI5LTRlYTQtYjQ0Yi1kM2JhMGU1NDllYTIifQ==",
         )
         self.run['params'] = dict(**kwargs)
-    def show_losses(self, losses):
+    def show_losses(self, epoch, losses):
         for name, value in losses.items():
             self.run[name].log(value)
     def upload(self, name, filename):
         self.run[name].upload(filename)
 
-def logger(*, console=None, save_rate=None, sample_rate=None, **ignore):
-    return ConsoleLogger() if console else NeptuneLogger()
+def logger(*, console=None, **kwargs):
+    return ConsoleLogger(**kwargs) if console else NeptuneLogger(**kwargs)
 
 def run(cfg):
     from train import trainVAE

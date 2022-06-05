@@ -9,11 +9,11 @@ def trainVAE(*, trial=None, device=None, loader=None, model=None, optim=None, sc
     last_loss = None
     for epoch in tqdm(range(epochs)):
         ls = []
-        for batch_num, x in enumerate(loader):
+        for batch_num, (x, info) in enumerate(loader):
             x = x.to(device)
             z, aux = model.encode(x)
             y = model.decode(z, aux)
-            l, parts = criterion(input=y, target=x, aux=aux)
+            l, parts = criterion(input=y, target=x, info=info, aux=aux)
             optim.zero_grad()
             l.backward()
             optim.step()
