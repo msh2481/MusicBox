@@ -23,6 +23,11 @@ def dataset(name):
         return torch.load('dataset_v2.p')
     elif name == 'dataset_v2_overfit':
         return [dataset('dataset_v2')[0][:, ::100]]
+    elif name == 'dataset_v3':
+        ensure_download('X_v3', 'X_v3.p')
+        ensure_download('y_v3', 'y_v3.p')
+        X, y = torch.load('X_v3.p'), torch.load('y_v3.p')
+        return [(X[i], y[i]) for i in range(1000)]
     else:
         assert False, f'unknown dataset {name}'
 
@@ -32,7 +37,7 @@ def dataloader(*, data=None, batch_size=None, shuffle=True, num_workers=0, pin_m
     return DataLoader(dataset(data), batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=pin_memory)
 
 def model_optim_sched(*, device=None, model_loader=None, optim_loader=None, sched_loader='sch.ExponentialLR(o, 1.0)', **params):
-    from models import ConvDummy, Conv1dAE, Conv1dVAE
+    from models import ConvDummy, Conv1dAE, Conv1dVAE, Conv2dVAE
     m = eval(model_loader).to(device)
     o = eval(optim_loader)
     s = eval(sched_loader)

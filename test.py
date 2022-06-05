@@ -6,7 +6,7 @@ import torch
 import cProfile
 from time import time
 from itertools import islice, cycle
-import optuna 
+import optuna
 
 SKIP_WORKING = True
 
@@ -34,9 +34,17 @@ class Datasets(unittest.TestCase):
         self.assertEqual(len(data), 1)
         x = data[0]
         self.assertEqual(x.shape, (128, 11))
+
+    def testV3(self):
+        data = build.dataset('dataset_v3')
+        self.assertEqual(len(data), 1000)
+        x, y = data[0]
+        self.assertEqual(x.shape, (128, 1024))
         self.assertEqual(x.dtype, torch.float32)
         self.assertLessEqual(-100, x.min().item())
         self.assertLessEqual(x.max().item(), 0.1)
+        self.assertEqual(y.dtype, torch.long)
+        self.assertEqual(y.item(), 0)
 
 @unittest.skipIf(SKIP_WORKING, '')
 class DataLoaders(unittest.TestCase):
@@ -48,7 +56,7 @@ class DataLoaders(unittest.TestCase):
         self.assertEqual(x.shape, (128, 1, 28, 28))
         self.assertEqual(x.dtype, torch.float32)
         self.assertEqual(y.dtype, torch.long)
-    
+
     def testV2(self):
         loader = build.dataloader(
             data='dataset_v2', batch_size=4)
@@ -72,6 +80,19 @@ class DataLoaders(unittest.TestCase):
         dur = time() - t0
         self.assertLess(dur, 0.01)
 
+    def testV3(self):
+        loader = build.dataloader(
+            data='dataset_v3', batch_size=50)
+        self.assertEqual(len(loader), 20)
+        x, y = next(iter(loader))
+        self.assertEqual(x.shape, (50, 128, 1024))
+        self.assertNotEqual(y.min(), y.max())
+        t0 = time()
+        for batch in loader:
+            pass
+        dur = time() - t0
+        self.assertLess(dur, 0.2)
+
 @unittest.skipIf(SKIP_WORKING, '')
 class ModelOptimSched(unittest.TestCase):
     def testDummy(self):
@@ -92,16 +113,15 @@ class ModelOptimSched(unittest.TestCase):
 
     def testConvAE(self):
         m, o, s = build.model_optim_sched(
-            device='cpu', model_loader='Conv1dAE([128, 10], 3)', optim_loader='opt.AdamW(m.parameters(), weight_decay=params["wd"])', wd=1e-6)
+            device='cpu', model_loader='Conv1dAE([128, 10], 5)', optim_loader='opt.AdamW(m.parameters(), weight_decay=params["wd"])', wd=1e-6)
         m.train()
-        print(m)
         x = torch.randn((4, 128, 1025))
         z, aux = m.encode(x)
         self.assertTrue(aux is None)
         self.assertEqual(z.shape, (4, 10, 1025))
         y = m.decode(z, aux)
         self.assertEqual(y.shape, x.shape)
-        self.assertEqual(y.shape, x.shape)
+        self.assertEqual(y.dtype, x.dtype)
 
     def testConvVAE(self):
         m, o, s = build.model_optim_sched(
@@ -113,6 +133,28 @@ class ModelOptimSched(unittest.TestCase):
         self.assertEqual(z.shape, (4, 10, 1025))
         y = m.decode(z, aux)
         self.assertEqual(y.shape, x.shape)
+
+    def testConv2dVAE(self):
+        m, o, s = build.model_optim_sched(
+            device='cpu', model_loader='Conv2dVAE([1, 10], [(1, 1)], (7, 3))', optim_loader='opt.Adam(m.parameters())')
+        m.train()
+        x = torch.randn((4, 1, 128, 1024))
+        z, aux = m.encode(x)
+        self.assertEqual(z.shape, aux.shape)
+        self.assertEqual(z.shape, (4, 10, 128, 1024))
+        y = m.decode(z, aux)
+        self.assertEqual(y.shape, x.shape)
+
+    def testConv2dVAEWithStride(self):
+        m, o, s = build.model_optim_sched(
+            device='cpu', model_loader='Conv2dVAE([1, 10], [(2, 16)], (5, 9))', optim_loader='opt.Adam(m.parameters())')
+        m.train()
+        print(m)
+        x = torch.randn((7, 1, 128, 1024))
+        z, aux = m.encode(x)
+        self.assertEqual(z.shape, aux.shape)
+        self.assertEqual(z.shape, (7, 10, 64, 64))
+        y = m.decode(z, aux)
         self.assertEqual(y.shape, x.shape)
 
 @unittest.skipIf(SKIP_WORKING, '')
@@ -141,7 +183,7 @@ class TrainAE(unittest.TestCase):
         # 10    10
         # 20    0.005
         # 30    4e-6
-    
+
     def testOverfit(self):
         build.run({
             'trainer': 'trainVAE',
@@ -161,6 +203,8 @@ class TrainAE(unittest.TestCase):
         })
         # mse ~ 0.01 after 500 epochs
 
+
+@unittest.skipIf(SKIP_WORKING, '')
 class Optuna(unittest.TestCase):
     def testDummy(self):
         def objective(trial):
@@ -172,11 +216,11 @@ class Optuna(unittest.TestCase):
                 'optim_loader': 'opt.AdamW(m.parameters(), lr=params["lr"], weight_decay=params["wd"])',
                 'k_mse': 1.0,
                 'k_kl': None,
-                'console': False,
-                'save_rate': 0.0
+                'console': True,
+                'save_rate': None
             }
             cfg['batch_size'] = 2**trial.suggest_int('log_bs', 2, 6)
-            kernel_size = trial.suggest_int('ks', 3, 5)
+            kernel_size = 1 + 2 * trial.suggest_int('ks/2', 1, 2)
             if trial.suggest_categorical('layers', [1, 2]) == 1:
                 layer_1 = trial.suggest_int('layer_1', 8, 32, log=True)
                 cfg['model_loader'] = f'Conv1dAE([128, {layer_1}], kernel_size={kernel_size})'
@@ -184,12 +228,13 @@ class Optuna(unittest.TestCase):
                 layer_1 = trial.suggest_int('layer_1', 32, 64, log=True)
                 layer_2 = trial.suggest_int('layer_2', 8, 32, log=True)
                 cfg['model_loader'] = f'Conv1dAE([128, {layer_1}, {layer_2}], kernel_size={kernel_size})'
-            
+
             cfg['lr'] = trial.suggest_float('lr', 1e-4, 1e-2, log=True)
             cfg['wd'] = trial.suggest_float('wd', 1e-6, 1e-2, log=True)
             return build.run(cfg)
         study = optuna.create_study(direction='minimize')
         study.optimize(objective, n_trials=3)
+
 
 if __name__ == '__main__':
     unittest.main()
