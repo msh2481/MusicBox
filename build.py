@@ -17,7 +17,7 @@ def ensure_download(remote_name, local_name=None):
 
 def dataset(name):
     if name == 'mnist':
-        return datasets.MNIST(root='mnist', train=True, transform=transforms.ToTensor(), download=True)
+        return datasets.MNIST(root='mnist', train=True, transform=transforms.Compose([transforms.ToTensor(), transforms.Resize(32)]), download=True)
     elif name == 'dataset_v2':
         ensure_download('dataset_v2', 'dataset_v2.p')
         return torch.load('dataset_v2.p')

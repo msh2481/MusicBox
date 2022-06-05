@@ -16,7 +16,7 @@ class Datasets(unittest.TestCase):
         data = build.dataset('mnist')
         self.assertEqual(len(data), 60000)
         x, y = data[0]
-        self.assertEqual(x.shape, (1, 28, 28))
+        self.assertEqual(x.shape, (1, 32, 32))
         self.assertEqual(x.dtype, torch.float32)
         self.assertTrue(type(y) is int)
 
@@ -53,7 +53,7 @@ class DataLoaders(unittest.TestCase):
             data='mnist', batch_size=128, num_workers=0, trash=(1, 2))
         self.assertEqual(len(loader), 469)
         x, y = next(iter(loader))
-        self.assertEqual(x.shape, (128, 1, 28, 28))
+        self.assertEqual(x.shape, (128, 1, 32, 32))
         self.assertEqual(x.dtype, torch.float32)
         self.assertEqual(y.dtype, torch.long)
 
