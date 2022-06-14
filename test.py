@@ -128,8 +128,9 @@ class ModelOptimSched(unittest.TestCase):
         o.step()
         s.step()
 
-@unittest.skipIf(SKIP_WORKING, '')
+
 class Models(unittest.TestCase):
+    @unittest.skipIf(SKIP_WORKING, '')
     def testConvAE(self):
         m = just_model('Conv1dAE([128, 10], 5)')
         m.train()
@@ -143,6 +144,7 @@ class Models(unittest.TestCase):
         g = m.generate()
         self.assertEqual(g.shape, x[0].shape)
 
+    @unittest.skipIf(SKIP_WORKING, '')
     def testConvVAE(self):
         m = just_model('Conv1dVAE([128, 10], 3)')
         m.train()
@@ -155,6 +157,7 @@ class Models(unittest.TestCase):
         g = m.generate()
         self.assertEqual(g.shape, x[0].shape)
 
+    @unittest.skipIf(SKIP_WORKING, '')
     def testConv2dVAE(self):
         m = just_model('Conv2dVAE([1, 10], [(1, 1)], [(7, 3)])')
         m.train()
@@ -167,10 +170,24 @@ class Models(unittest.TestCase):
         g = m.generate()
         self.assertNotEqual(g.shape, x[0].shape)
 
+    @unittest.skipIf(SKIP_WORKING, '')
     def testConv2dVAEWithStride(self):
         m = just_model('Conv2dVAE([1, 256, 128, 64, 32, 16], [(4, 4), (4, 4), (4, 4), (2, 4), (1, 4)], [5, 5, 5, (3, 5), (1, 5)])')
         m.train()
         x = torch.randn((7, 1, 128, 1024))
+        z, aux = m.encode(x)
+        self.assertEqual(z.shape, aux.shape)
+        self.assertEqual(z.shape, (7, 16, 1, 1))
+        y = m.decode(z, aux)
+        self.assertEqual(y.shape, x.shape)
+        g = m.generate()
+        self.assertEqual(g.shape, x[0].shape)
+
+    @unittest.skipIf(SKIP_WORKING, '')
+    def testM1(self):
+        m = just_model('M1(256, 16)')
+        m.train()
+        x = torch.randn((7, 1, 256, 256))
         z, aux = m.encode(x)
         self.assertEqual(z.shape, aux.shape)
         self.assertEqual(z.shape, (7, 16, 1, 1))
@@ -278,6 +295,25 @@ class Optuna(unittest.TestCase):
             return build.run(cfg)
         study = optuna.create_study(direction='minimize')
         study.optimize(objective, n_trials=1)
+
+class Misc(unittest.TestCase):
+    def testSomething(self):
+        cfg = {
+            'trainer': 'trainVAE',
+            'data': 'dataset_v4',
+            'epochs': 3,
+            'device': 'cpu',
+            'optim_loader': 'opt.AdamW(m.parameters(), lr=1e-3)',
+            'k_mse': 1.0,
+            'k_kl': None,
+            'console': False,
+            'save_rate': 0.0,
+            'sample_rate': 0.0,
+            'batch_size': 16
+        }
+        # channels_list, strides_list, kernel_sizes
+        cfg['model_loader'] = f'M1(4, 16)'
+        build.run(cfg)
 
 if __name__ == '__main__':
     unittest.main()
