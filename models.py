@@ -137,32 +137,32 @@ class ResEncoderBlock(nn.Module):
     def __init__(self, c):
         super().__init__()
         self.bn1 = nn.BatchNorm2d(c)
-        self.conv1 = nn.Conv2d(c, c, 4, 2, 1)
-        self.bn2 = nn.BatchNorm2d(c)
-        self.conv2 = nn.Conv2d(c, c, 4, 2, 1)
+        self.conv1 = nn.Conv2d(c, c, 256, 256, 0)
+        # self.bn2 = nn.BatchNorm2d(c)
+        # self.conv2 = nn.Conv2d(c, c, 4, 2, 1)
         self.act = nn.LeakyReLU(0.2)
-        self.pool = nn.AvgPool2d(4)
+        # self.pool = nn.AvgPool2d(4)
     def forward(self, x):
-        f = self.pool(x)
+        # f = self.pool(x)
         g = self.conv1(self.act(self.bn1(x)))
-        g = self.conv1(self.act(self.bn2(g)))
-        return f + g
+        # g = self.conv1(self.act(self.bn2(g)))
+        return g
 
 class ResDecoderBlock(nn.Module):
     def __init__(self, c):
         super().__init__()
         self.c = c
         self.bn1 = nn.BatchNorm2d(c)
-        self.conv1 = nn.ConvTranspose2d(c, c, 4, 2, 1)
-        self.bn2 = nn.BatchNorm2d(c)
-        self.conv2 = nn.ConvTranspose2d(c, c, 4, 2, 1)
+        self.conv1 = nn.ConvTranspose2d(c, c, 256, 256, 0)
+        # self.bn2 = nn.BatchNorm2d(c)
+        # self.conv2 = nn.ConvTranspose2d(c, c, 4, 2, 1)
         self.act = nn.LeakyReLU(0.2)
-        self.pool = nn.Upsample(scale_factor=4)
+        # self.pool = nn.Upsample(scale_factor=4)
     def forward(self, x):
-        f = self.pool(x)
+        # f = self.pool(x)
         g = self.conv1(self.act(self.bn1(x)))
-        g = self.conv2(self.act(self.bn2(g)))
-        return f + g
+        # g = self.conv2(self.act(self.bn2(g)))
+        return g
 
 class M1(nn.Module, Generatable):
     def __init__(self, ch, dim):
@@ -171,17 +171,11 @@ class M1(nn.Module, Generatable):
         self.encoder = nn.Sequential(
             nn.Conv2d(1, ch, 3, 1, 1),
             ResEncoderBlock(ch),
-            ResEncoderBlock(ch),
-            ResEncoderBlock(ch),
-            ResEncoderBlock(ch),
         )
         self.mu_head = nn.Conv2d(ch, dim, 1)
         self.ls_head = nn.Conv2d(ch, dim, 1)
         self.decoder = nn.Sequential(
             nn.ConvTranspose2d(dim, ch, 1),
-            ResDecoderBlock(ch),
-            ResDecoderBlock(ch),
-            ResDecoderBlock(ch),
             ResDecoderBlock(ch),
             nn.ConvTranspose2d(ch, 1, 3, 1, 1)
         )
