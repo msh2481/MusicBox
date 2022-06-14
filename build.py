@@ -31,6 +31,11 @@ def dataset(name):
         ensure_download('y_v3', 'y_v3.p')
         X, y = torch.load('X_v3.p'), torch.load('y_v3.p')
         return [(X[i].unsqueeze(0), y[i]) for i in range(len(X))]
+    elif name == 'dataset_v4':
+        ensure_download('X_v4', 'X_v4.p')
+        ensure_download('y_v4', 'y_v4.p')
+        X, y = torch.load('X_v4.p'), torch.load('y_v4.p')
+        return [(X[i].unsqueeze(0), y[i]) for i in range(len(X))]
     else:
         assert False, f'unknown dataset {name}'
 

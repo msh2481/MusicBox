@@ -42,10 +42,21 @@ class Datasets(unittest.TestCase):
         data = build.dataset('dataset_v3')
         self.assertEqual(len(data), 1000)
         x, y = data[0]
-        self.assertEqual(x.shape, (128, 1024))
+        self.assertEqual(x.shape, (1, 128, 1024))
         self.assertEqual(x.dtype, torch.float32)
         self.assertLessEqual(-100, x.min().item())
         self.assertLessEqual(x.max().item(), 0.1)
+        self.assertEqual(y.dtype, torch.long)
+        self.assertEqual(y.item(), 0)
+
+    def testV4(self):
+        data = build.dataset('dataset_v4')
+        self.assertEqual(len(data), 1000)
+        x, y = data[0]
+        self.assertEqual(x.shape, (1, 256, 256))
+        self.assertEqual(x.dtype, torch.float32)
+        self.assertLessEqual(-4, x.min().item())
+        self.assertLessEqual(x.max().item(), 4)
         self.assertEqual(y.dtype, torch.long)
         self.assertEqual(y.item(), 0)
 
