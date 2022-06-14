@@ -36,6 +36,8 @@ def dataset(name):
         ensure_download('y_v4', 'y_v4.p')
         X, y = torch.load('X_v4.p'), torch.load('y_v4.p')
         return [(X[i].unsqueeze(0), y[i]) for i in range(len(X))]
+    elif name == 'dataset_v4_overfit':
+        return dataset('dataset_v4')[:4]
     else:
         assert False, f'unknown dataset {name}'
 
@@ -129,7 +131,9 @@ def saved_model(run_name, checkpoint):
         run=run_name,
         mode='read-only'
     )
-    run[checkpoint].download('model.p')
+    model = checkpoint + '.p'
+    if model not in os.listdir():
+        run[checkpoint].download(model)
     params = run['params'].fetch()
     params['device'] = 'cpu'
     print(params)

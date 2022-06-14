@@ -298,22 +298,7 @@ class Optuna(unittest.TestCase):
 
 class Misc(unittest.TestCase):
     def testSomething(self):
-        cfg = {
-            'trainer': 'trainVAE',
-            'data': 'dataset_v4',
-            'epochs': 3,
-            'device': 'cpu',
-            'optim_loader': 'opt.AdamW(m.parameters(), lr=1e-3)',
-            'k_mse': 1.0,
-            'k_kl': None,
-            'console': False,
-            'save_rate': 0.0,
-            'sample_rate': 0.0,
-            'batch_size': 16
-        }
-        # channels_list, strides_list, kernel_sizes
-        cfg['model_loader'] = f'M1(4, 16)'
-        build.run(cfg)
+        pass
 
 if __name__ == '__main__':
     unittest.main()
