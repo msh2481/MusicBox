@@ -4,6 +4,14 @@ from torch import nn, optim
 from torch.nn import Identity as Id, BatchNorm2d as BN2d, Sequential as Seq, AvgPool2d as Avg2d
 from math import ceil 
 
+def module_name(v):
+    return str(v).split('\n')[0]
+def module_dfs(v):
+    sons = list(v.children())
+    return module_name(v) + ''.join(module_dfs(u) for u in sons) + ')' if len(sons) else str(v)
+def module_description(model):
+    return ''.join(module_dfs(model))
+
 # stride * (out_size - 1) = in_size + 2 * padding - dilation * (kernel_size - 1)
 def calculate_padding(in_size, out_size, kernel_size, stride):
     double_padding = stride * (out_size - 1) - in_size + kernel_size
@@ -61,6 +69,28 @@ def ResLearned(conv_type, in_channels, out_channels, in_size, out_size, kernel_s
             ConvBlock(conv_type, mid_channels, out_channels, mid_size, out_size, kernel_size, stride)
         )
     )
+
+class VAE(nn.Module):
+    def __init__(self, encoder, mu_head, ls_head, decoder):
+        super().__init__()
+        self.encoder = encoder
+        self.mu_head = mu_head
+        self.ls_head = ls_head
+        self.decoder = decoder
+    
+    def encode(self, x):
+        t = self.encoder(x)
+        return self.mu_head(t), self.ls_head(t)
+    
+    def sample(self, mu, logsigma):
+        if logsigma is None:
+            return mu
+        assert mu.shape == logsigma.shape
+        return mu + torch.randn_like(mu) * logsigma
+
+    def decode(self, mu, logsigma):
+        z = self.sample(mu, logsigma)
+        return self.decoder(z)
 
 def generate(model):
     model.eval()
