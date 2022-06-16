@@ -17,6 +17,9 @@ def ensure_download(remote_name, local_name=None):
         project[remote_name].download(local_name)
     assert local_name in os.listdir()
 
+def log1px_encode(x):
+    return torch.sign(x) * torch.log(1 + torch.abs(x))
+
 def dataset(name):
     if name == 'mnist':
         return datasets.MNIST(root='mnist', train=True, transform=transforms.Compose([transforms.ToTensor(), transforms.Resize(32)]), download=True)
@@ -36,7 +39,7 @@ def dataset(name):
         ensure_download('X_v4', 'X_v4.p')
         ensure_download('y_v4', 'y_v4.p')
         X, y = torch.load('X_v4.p'), torch.load('y_v4.p')
-        return [(X[i].unsqueeze(0), y[i]) for i in range(len(X))]
+        return [(log1px_encode(X[i]).unsqueeze(0), y[i]) for i in range(len(X))]
     elif name == 'dataset_v4_overfit':
         return dataset('dataset_v4')[:4]
     else:

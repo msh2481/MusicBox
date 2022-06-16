@@ -1,14 +1,14 @@
 from sklearn.neighbors import KNeighborsTransformer
 import torch
 from torch import nn, optim
-from torch.nn import Identity as Id, BatchNorm2d as BN2d, Sequential as Seq, AvgPool2d as Avg2d
+from torch.nn import Identity as Id, BatchNorm2d, Sequential, LeakyReLU, Conv2d, ConvTranspose2d
 from math import ceil 
 
 def module_name(v):
     return str(v).split('\n')[0]
 def module_dfs(v):
     sons = list(v.children())
-    return module_name(v) + ''.join(module_dfs(u) for u in sons) + ')' if len(sons) else str(v)
+    return module_name(v) + ','.join(module_dfs(u) for u in sons) + ')' if len(sons) else str(v)
 def module_description(model):
     return ''.join(module_dfs(model))
 
@@ -38,11 +38,11 @@ class Sum(nn.Module):
         return self.f(x) + self.g(x)
 
 def Activation():
-    return nn.LeakyReLU(0.2)
+    return LeakyReLU(0.2)
 
 def ConvBlock(conv_type, in_channels, out_channels, in_size, out_size, kernel_size, stride, bias=False):
-    return Seq(
-            BN2d(in_channels),
+    return Sequential(
+            BatchNorm2d(in_channels),
             Activation(),
             conv_type(in_channels, out_channels, in_size, out_size, kernel_size, stride, bias)
         )
@@ -50,7 +50,7 @@ def ConvBlock(conv_type, in_channels, out_channels, in_size, out_size, kernel_si
 def ResSimple(conv_type, channels, kernel_size, stride):
     return Sum(
         Id(),
-        Seq(
+        Sequential(
             ConvBlock(conv_type, channels, channels, kernel_size, kernel_size, kernel_size, stride),
             ConvBlock(conv_type, channels, channels, kernel_size, kernel_size, kernel_size, stride)
         )
@@ -60,11 +60,11 @@ def ResLearned(conv_type, in_channels, out_channels, in_size, out_size, kernel_s
     mid_channels = round((in_channels * out_channels) ** 0.5)
     mid_size = round((in_size * out_size) ** 0.5)
     return Sum(
-        Seq(
-            BN2d(in_channels),
+        Sequential(
+            BatchNorm2d(in_channels),
             conv_type(in_channels, out_channels, in_size, out_size, kernel_size, stride ** 2, bias=False)
         ),
-        Seq(
+        Sequential(
             ConvBlock(conv_type, in_channels, mid_channels, in_size, mid_size, kernel_size, stride),
             ConvBlock(conv_type, mid_channels, out_channels, mid_size, out_size, kernel_size, stride)
         )
@@ -78,9 +78,23 @@ class VAE(nn.Module):
         self.ls_head = ls_head
         self.decoder = decoder
     
+        self.last_z = None
+        self.z_mean = 0
+        self.z_std = 0
+        self.z_cnt = 0
+    
+    def note_z(self, z):
+        z = z[0:1]
+        self.last_z = z
+        self.z_mean = (self.z_mean * self.z_cnt + z) / (self.z_cnt + 1)
+        self.z_std = (self.z_std * self.z_cnt + z) / (self.z_cnt + 1)
+        self.z_cnt += 1
+
     def encode(self, x):
         t = self.encoder(x)
-        return self.mu_head(t), self.ls_head(t)
+        mu, ls = self.mu_head(t), self.ls_head(t)
+        self.note_z(mu)
+        return mu, ls
     
     def sample(self, mu, logsigma):
         if logsigma is None:
@@ -92,8 +106,10 @@ class VAE(nn.Module):
         z = self.sample(mu, logsigma)
         return self.decoder(z)
 
-def generate(model):
-    model.eval()
-    device = next(iter(model.decoder.parameters())).device
-    z = torch.randn(model.z_shape, device=device)
-    return model.decode(z.unsqueeze(0), None).squeeze(0)
+    def generate_seen(self):
+        self.eval()
+        return self.decode(self.last_z, None)
+    
+    def generate(self):
+        self.eval()
+        return self.decode(self.z_mean, self.z_std)

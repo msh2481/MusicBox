@@ -7,6 +7,8 @@ import cProfile
 from time import time
 from itertools import islice, cycle
 import optuna
+from models import *
+from train import trainVAE
 
 SKIP_WORKING = True
 SKIP_MANUAL = True 
@@ -107,10 +109,33 @@ class DataLoaders(unittest.TestCase):
         dur = time() - t0
         self.assertLess(dur, 0.5)
 
+class Description(unittest.TestCase):
+    def testBackAndForth(self):
+        c = 16
+        encoder = Sequential(
+            ConvBlock(C2d, 1, c, 256, 64, 4, 4),
+            ConvBlock(C2d, c, c, 64, 16, 4, 4),
+            ConvBlock(C2d, c, c, 16, 4, 4, 4),
+        )
+        mu_head = ConvBlock(C2d, c, c, 4, 1, 4, 4)
+        ls_head = ConvBlock(C2d, c, c, 4, 1, 4, 4)
+        decoder = Sequential(
+            ConvBlock(CT2d, c, c, 4, 1, 4, 4),
+            ConvBlock(CT2d, c, c, 16, 4, 4, 4),
+            ConvBlock(CT2d, c, c, 64, 16, 4, 4),
+            ConvBlock(CT2d, c, 1, 256, 64, 4, 4),
+        )
+        vae = VAE(encoder, mu_head, ls_head, decoder)
+        self.assertEqual(module_description(eval(module_description(vae))), module_description(vae))
 
-class Misc(unittest.TestCase):
-    def testSomething(self):
-        pass
+class Train(unittest.TestCase):
+    model_loader = 'VAE(Sequential(Sequential(BatchNorm2d(1, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),Conv2d(1, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),Conv2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),Conv2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False))),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),Conv2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),Conv2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),ConvTranspose2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),ConvTranspose2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),ConvTranspose2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),ConvTranspose2d(16, 1, kernel_size=(4, 4), stride=(4, 4), bias=False))))'
+    loader = build.dataloader(data='dataset_v4_overfit', batch_size=16)
+    model, optim, sched = build.model_optim_sched(device='cpu', model_loader=model_loader, optim_loader='opt.AdamW(m.parameters(), lr=1e-3)')
+    logger = build.logger(console=True, save_rate=0.0, sample_rate=0.0)
+    criterion = build.criterion(k_mse=1.0, k_kl=None)
+    trainVAE(trial=None, device='cpu', loader=loader, model=model, optim=optim, sched=sched, criterion=criterion, logger=logger, epochs=3)
+    print(model.generate().shape)
 
 if __name__ == '__main__':
     unittest.main()
