@@ -9,6 +9,7 @@ from torchvision import datasets, transforms
 import neptune.new as neptune
 from random import random
 import matplotlib.pyplot as plt 
+from models import *
 
 def ensure_download(remote_name, local_name=None):
     if local_name not in os.listdir():
@@ -47,7 +48,6 @@ def dataloader(*, data=None, batch_size=None, shuffle=True, num_workers=0, pin_m
     return DataLoader(dataset(data), batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, pin_memory=pin_memory)
 
 def model_optim_sched(*, device=None, model_loader=None, optim_loader=None, sched_loader='sch.ExponentialLR(o, 1.0)', **params):
-    from models import ConvDummy, Conv1dAE, Conv1dVAE, Conv2dVAE, M1
     m = eval(model_loader).to(device)
     o = eval(optim_loader)
     s = eval(sched_loader)
