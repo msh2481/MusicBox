@@ -85,7 +85,7 @@ class VAE(nn.Module):
         self.register_buffer('z_cnt', None)
     
     def note_z(self, z):
-        z = z[0:1]
+        z = z[0:1].detach()
         self.last_z = z
         if self.z_cnt is None:
             self.z_mean = z

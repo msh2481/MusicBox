@@ -85,13 +85,15 @@ class BaseLogger:
         self.sample_rate = sample_rate
     def __call__(self, epoch=None, last_batch=None, losses=None, model=None):
         self.show_losses(epoch, losses)
-        if self.save_rate is not None and (random() < self.save_rate or last_batch):
+        if self.save_rate is not None and random() < self.save_rate:
             name = f'model_{epoch}'
             torch.save(model.state_dict(), name + '.p')
             self.upload(name, name + '.p')
-        if self.sample_rate is not None and (random() < self.sample_rate or last_batch):
+        if self.sample_rate is not None and random() < self.sample_rate:
             name = f'sample_{epoch}'
             sample = model.generate().detach().cpu().flatten(start_dim=0, end_dim=-2)
+            mu, sigma = sample.mean(), sample.std()
+            sample = sample.clip(mu - 3 * sigma, mu + 3 * sigma)
             plt.imshow(sample)
             plt.savefig(name + '.jpg')
             self.upload(name, name + '.jpg')
@@ -131,7 +133,7 @@ def run(cfg):
     m, o, s = model_optim_sched(**cfg)
     return trainer(loader=dataloader(**cfg), model=m, optim=o, sched=s, criterion=criterion(**cfg), logger=logger(**cfg), **cfg)
 
-def saved_model(run_name, checkpoint):
+def saved_model(run_name, checkpoint, init_with=None, strict=False):
     run = neptune.init(
         project="mlxa/MusicBox",
         api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiI5NTIzY2UxZC1jMjI5LTRlYTQtYjQ0Yi1kM2JhMGU1NDllYTIifQ==",
@@ -145,5 +147,7 @@ def saved_model(run_name, checkpoint):
     params['device'] = 'cpu'
     print(params)
     model, _, _ = model_optim_sched(**params)
-    model.load_state_dict(torch.load(filename, map_location='cpu'))
+    if init_with is not None:
+        model.encode(torch.randn(init_with))
+    model.load_state_dict(torch.load(filename, map_location='cpu'), strict=strict)
     return model
