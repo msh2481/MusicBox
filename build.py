@@ -21,6 +21,9 @@ def log1px_encode(x):
     return torch.sign(x) * torch.log(1 + torch.abs(x))
 
 def dataset(name):
+    def normalize(x):
+        return (x - x.mean()) / x.std()
+    
     if name == 'mnist':
         return datasets.MNIST(root='mnist', train=True, transform=transforms.Compose([transforms.ToTensor(), transforms.Resize(32)]), download=True)
     elif name == 'dataset_v2':
@@ -39,7 +42,7 @@ def dataset(name):
         ensure_download('X_v4', 'X_v4.p')
         ensure_download('y_v4', 'y_v4.p')
         X, y = torch.load('X_v4.p'), torch.load('y_v4.p')
-        return [(log1px_encode(X[i]).unsqueeze(0), y[i]) for i in range(len(X))]
+        return [(normalize(X[i]).unsqueeze(0), y[i]) for i in range(len(X))]
     elif name == 'dataset_v4_overfit':
         return dataset('dataset_v4')[:4]
     else:
@@ -71,7 +74,8 @@ def criterion(*, k_mse=None, k_kl=None, **ignore):
     else:
         def result(input, target, aux, info):
             mse = F.mse_loss(input, target)
-            kl = kl_div(input, aux)
+            mu, logsigma = aux
+            kl = kl_div(mu, logsigma)
             return k_mse * mse + k_kl * kl, {'mse': mse, 'kl': kl}
         return result
 
@@ -134,12 +138,12 @@ def saved_model(run_name, checkpoint):
         run=run_name,
         mode='read-only'
     )
-    model = checkpoint + '.p'
-    if model not in os.listdir():
-        run[checkpoint].download(model)
+    filename = checkpoint + '.p'
+    if filename not in os.listdir():
+        run[checkpoint].download(filename)
     params = run['params'].fetch()
     params['device'] = 'cpu'
     print(params)
     model, _, _ = model_optim_sched(**params)
-    model.load_state_dict(torch.load('model.p', map_location='cpu'))
+    model.load_state_dict(torch.load(filename, map_location='cpu'))
     return model

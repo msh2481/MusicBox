@@ -1,3 +1,4 @@
+from matplotlib.pyplot import isinteractive
 from sklearn.neighbors import KNeighborsTransformer
 import torch
 from torch import nn, optim
@@ -62,7 +63,7 @@ def ResLearned(conv_type, in_channels, out_channels, in_size, out_size, kernel_s
     return Sum(
         Sequential(
             BatchNorm2d(in_channels),
-            conv_type(in_channels, out_channels, in_size, out_size, kernel_size, stride ** 2, bias=False)
+            conv_type(in_channels, out_channels, in_size, out_size, stride ** 2, stride ** 2, bias=False)
         ),
         Sequential(
             ConvBlock(conv_type, in_channels, mid_channels, in_size, mid_size, kernel_size, stride),
@@ -77,18 +78,28 @@ class VAE(nn.Module):
         self.mu_head = mu_head
         self.ls_head = ls_head
         self.decoder = decoder
-    
-        self.last_z = None
-        self.z_mean = 0
-        self.z_std = 0
-        self.z_cnt = 0
+        self.register_buffer('last_z', None)
+        self.register_buffer('z_mean', None)
+        self.register_buffer('z_m2', None)
+        self.register_buffer('z_std', None)
+        self.register_buffer('z_cnt', None)
     
     def note_z(self, z):
         z = z[0:1]
         self.last_z = z
-        self.z_mean = (self.z_mean * self.z_cnt + z) / (self.z_cnt + 1)
-        self.z_std = (self.z_std * self.z_cnt + z) / (self.z_cnt + 1)
-        self.z_cnt += 1
+        if self.z_cnt is None:
+            self.z_mean = z
+            self.z_m2 = torch.zeros_like(z)
+            self.z_std = torch.zeros_like(z)
+            self.z_cnt = torch.tensor(1.0)
+        else:
+            # update from https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+            self.z_cnt += 1
+            delta = z - self.z_mean
+            self.z_mean += delta / self.z_cnt
+            delta2 = z - self.z_mean
+            self.z_m2 += delta * delta2
+            self.z_std = torch.sqrt(self.z_m2 / self.z_cnt)
 
     def encode(self, x):
         t = self.encoder(x)

@@ -11,9 +11,9 @@ def trainVAE(*, trial=None, device=None, loader=None, model=None, optim=None, sc
         ls = []
         for batch_num, (x, info) in enumerate(loader):
             x = x.to(device)
-            z, aux = model.encode(x)
-            y = model.decode(z, aux)
-            l, parts = criterion(input=y, target=x, info=info, aux=aux)
+            z_mu, z_ls = model.encode(x)
+            y = model.decode(z_mu, z_ls)
+            l, parts = criterion(input=y, target=x, info=info, aux=(z_mu, z_ls))
             optim.zero_grad()
             l.backward()
             optim.step()

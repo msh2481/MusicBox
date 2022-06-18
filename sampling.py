@@ -15,20 +15,21 @@ def save_audio(filename, spec):
 spec = build.dataset('dataset_v4')[0][0]
 
 
-model = build.saved_model('MUS-227', 'model_16.9375')
-model.eval()
+model = build.saved_model('MUS-247', 'model_1.0')
+print(model.z_mean)
+# model.eval()
 
-code, aux = model.encode(spec.unsqueeze(0))
-print(code)
-print(aux)
+# code, aux = model.encode(spec.unsqueeze(0))
+# print(code)
+# print(aux)
 
-spec = model.decode(code, None)
+# spec = model.decode(code, None)
 
-spec = spec[0][0].detach().numpy()
-print(spec.shape)
-plt.imshow(librosa.power_to_db(spec ** 2))
-plt.show()
-save_audio('check.wav', spec)
+# spec = spec[0][0].detach().numpy()
+# print(spec.shape)
+# plt.imshow(librosa.power_to_db(spec ** 2))
+# plt.show()
+# save_audio('check.wav', spec)
 
-# y = model.generate().detach().cpu()
-# save_audio('sample.wav', y.numpy())
+# # y = model.generate().detach().cpu()
+# # save_audio('sample.wav', y.numpy())
