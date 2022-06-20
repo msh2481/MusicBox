@@ -4,16 +4,15 @@ from itertools import cycle
 from tqdm import tqdm
 import optuna
 
-def trainVAE(*, trial=None, device=None, loader=None, model=None, optim=None, sched=None, criterion=None, logger=None, epochs=None, **ignore):
+def trainAR(*, trial=None, device=None, loader=None, model=None, optim=None, sched=None, criterion=None, logger=None, epochs=None, **ignore):
     model.train()
     last_loss = None
     for epoch in tqdm(range(epochs)):
         ls = []
         for batch_num, (x, info) in enumerate(loader):
             x = x.to(device)
-            z_mu, z_ls = model.encode(x)
-            y = model.decode(z_mu, z_ls)
-            l, parts = criterion(input=y, target=x, info=info, aux=(z_mu, z_ls))
+            p = model(x)
+            l, parts = criterion(input=p, target=x)
             optim.zero_grad()
             l.backward()
             optim.step()
@@ -23,7 +22,7 @@ def trainVAE(*, trial=None, device=None, loader=None, model=None, optim=None, sc
         last_loss = sum(ls) / len(ls)
         if isinstance(sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
             sched.step(last_loss)
-        else:
+        elif sched is not None:
             sched.step()
         if trial:
             trial.report(last_loss, epoch)

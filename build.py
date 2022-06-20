@@ -64,20 +64,11 @@ def kl_div(mu, logsigma):
     loss = -0.5 * (1 + logsigma - torch.exp(logsigma) - mu**2).sum(dim=1).mean(dim=0)
     return loss
 
-def criterion(*, k_mse=None, k_kl=None, **ignore):
-    if k_kl is None:
-        assert k_mse is not None
-        def result(input, target, aux, info):
-            mse = F.mse_loss(input, target)
-            return k_mse * mse, {'mse': mse}
-        return result
-    else:
-        def result(input, target, aux, info):
-            mse = F.mse_loss(input, target)
-            mu, logsigma = aux
-            kl = kl_div(mu, logsigma)
-            return k_mse * mse + k_kl * kl, {'mse': mse, 'kl': kl}
-        return result
+def criterion(**ignore):
+    def result(input, target):
+        mse = F.mse_loss(input, target)
+        return mse, {'mse': mse}
+    return result
 
 class BaseLogger:
     def __init__(self, save_rate=None, sample_rate=None, **ignore):

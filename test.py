@@ -8,7 +8,7 @@ from time import time
 from itertools import islice, cycle
 import optuna
 from models import *
-from train import trainVAE
+from train import *
 
 SKIP_WORKING = True
 SKIP_MANUAL = True 
@@ -109,6 +109,7 @@ class DataLoaders(unittest.TestCase):
         dur = time() - t0
         self.assertLess(dur, 0.5)
 
+@unittest.skipIf(SKIP_WORKING, '')
 class Description(unittest.TestCase):
     def testBackAndForth(self):
         c = 16
@@ -128,14 +129,28 @@ class Description(unittest.TestCase):
         vae = VAE(encoder, mu_head, ls_head, decoder)
         self.assertEqual(module_description(eval(module_description(vae))), module_description(vae))
 
-class Train(unittest.TestCase):
-    model_loader = 'VAE(Sequential(Sequential(BatchNorm2d(1, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),Conv2d(1, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),Conv2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),Conv2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False))),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),Conv2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),Conv2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),ConvTranspose2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),ConvTranspose2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),ConvTranspose2d(16, 16, kernel_size=(4, 4), stride=(4, 4), bias=False)),Sequential(BatchNorm2d(16, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True),LeakyReLU(negative_slope=0.2),ConvTranspose2d(16, 1, kernel_size=(4, 4), stride=(4, 4), bias=False))))'
-    loader = build.dataloader(data='dataset_v4_overfit', batch_size=16)
-    model, optim, sched = build.model_optim_sched(device='cpu', model_loader=model_loader, optim_loader='opt.AdamW(m.parameters(), lr=1e-3)')
-    logger = build.logger(console=True, save_rate=0.0, sample_rate=0.0)
-    criterion = build.criterion(k_mse=1.0, k_kl=None)
-    trainVAE(trial=None, device='cpu', loader=loader, model=model, optim=optim, sched=sched, criterion=criterion, logger=logger, epochs=3)
-    print(model.generate().shape)
+class Models(unittest.TestCase):
+    def testCausalConv(self):
+        model = Sequential(
+            CausalConv(1, 10, 2, 1, shift=1), Activation(),
+            CausalConv(10, 10, 2, 2), Activation(),
+            CausalConv(10, 10, 2, 4), Activation(),
+            CausalConv(10, 1, 2, 8),
+        )
+        x = torch.randn((64, 1, 10))
+        y = model(x)
+        self.assertEqual(y.shape, x.shape)
+
+    def testTypeI(self):
+        model = Sequential(
+            TypeI(1, 10, 1, shift=1),
+            TypeI(10, 10, 2),
+            TypeI(10, 1, 4),
+        )
+        x = torch.randn((64, 1, 10))
+        y = model(x)
+        self.assertEqual(y.shape, x.shape)
+        print(model)
 
 if __name__ == '__main__':
     unittest.main()
