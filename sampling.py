@@ -16,7 +16,7 @@ spec = build.dataset('dataset_v4')[0][0]
 
 
 model = build.saved_model('MUS-247', 'model_1.0')
-print(model.z_mean)
+
 # model.eval()
 
 # code, aux = model.encode(spec.unsqueeze(0))
