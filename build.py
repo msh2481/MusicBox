@@ -54,10 +54,15 @@ def dataset_chooser(name):
         ensure_download("y_v4", "y_v4.p")
         X, y = torch.load("X_v4.p"), torch.load("y_v4.p")
         return [(normalize(X[i]).unsqueeze(0), y[i]) for i in range(len(X))]
+    if name == "dataset_v5":
+        ensure_download("X_v5", "X_v5.p")
+        ensure_download("y_v5", "y_v5.p")
+        X, y = torch.load("X_v5.p"), torch.load("y_v5.p")
+        return [(X[i], y[i]) for i in range(len(X))]
     assert False, f"unknown dataset {name}"
 
 
-def dataset(name, part):
+def dataset(name, part=1):
     data = dataset_chooser(name)
     full = len(data)
     need = round(full * part)

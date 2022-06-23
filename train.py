@@ -1,8 +1,10 @@
+from itertools import cycle
+
+import optuna
 import torch
 from torch import nn
-from itertools import cycle
 from tqdm import tqdm
-import optuna
+
 
 def trainAR(*, trial=None, device=None, loader=None, noise=0.0, model=None, optim=None, sched=None, criterion=None, logger=None, epochs=None, **ignore):
     model.train()

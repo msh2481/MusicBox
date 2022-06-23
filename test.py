@@ -61,6 +61,17 @@ class Datasets(unittest.TestCase):
         self.assertLessEqual(x.max().item(), 30)
         self.assertEqual(y.dtype, torch.long)
         self.assertEqual(y.item(), 0)
+    
+    def testV5(self):
+        data = build.dataset("dataset_v5")
+        self.assertEqual(len(data), 1000)
+        x, y = data[0]
+        self.assertEqual(x.shape, (1, 2 ** 16))
+        self.assertEqual(x.dtype, torch.float32)
+        self.assertLessEqual(-6, x.min().item())
+        self.assertLessEqual(x.max().item(), 6)
+        self.assertEqual(y.dtype, torch.long)
+        self.assertEqual(y.item(), 0)
 
 
 class DataLoaders(unittest.TestCase):
@@ -133,7 +144,7 @@ class Models(unittest.TestCase):
         y = model(x)
         self.assertEqual(y.shape, x.shape)
         print(model)
-    
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,8 @@
 import torch
-from torch import nn
-from torch.nn import BatchNorm1d, Sequential, LeakyReLU, Conv1d, Tanh, Sigmoid, Identity
 import torch.nn.functional as F
+from torch import nn
+from torch.nn import (BatchNorm1d, Conv1d, Identity, LeakyReLU, Sequential,
+                      Sigmoid, Tanh)
 
 
 def module_name(v):
