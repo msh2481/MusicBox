@@ -59,6 +59,7 @@ def add_one_tick(x, model, window=10**9):
 
 
 def generate(model, count, start=torch.zeros(1, 1), window=10**9):
+    start = start.to(next(iter(model.parameters())).device())
     for i in range(count):
         start = add_one_tick(start, model, window)
     return start
