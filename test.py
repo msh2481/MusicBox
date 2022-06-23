@@ -133,7 +133,7 @@ class Models(unittest.TestCase):
         y = model(x)
         self.assertEqual(y.shape, x.shape)
         print(model)
-
+    
 
 if __name__ == "__main__":
     unittest.main()
