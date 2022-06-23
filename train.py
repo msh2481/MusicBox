@@ -6,7 +6,20 @@ from torch import nn
 from tqdm import tqdm
 
 
-def trainAR(*, trial=None, device=None, loader=None, noise=0.0, model=None, optim=None, sched=None, criterion=None, logger=None, epochs=None, **ignore):
+def trainAR(
+    *,
+    trial=None,
+    device=None,
+    loader=None,
+    noise=0.0,
+    model=None,
+    optim=None,
+    sched=None,
+    criterion=None,
+    logger=None,
+    epochs=None,
+    **ignore
+):
     model.train()
     last_loss = None
     for epoch in tqdm(range(epochs)):
@@ -20,8 +33,12 @@ def trainAR(*, trial=None, device=None, loader=None, noise=0.0, model=None, opti
             l.backward()
             optim.step()
             ls.append(l.item())
-            logger(epoch=(epoch + batch_num / len(loader)),
-                   last_batch=(batch_num == len(loader) - 1), losses=parts, model=model)
+            logger(
+                epoch=(epoch + batch_num / len(loader)),
+                last_batch=(batch_num == len(loader) - 1),
+                losses=parts,
+                model=model,
+            )
         last_loss = sum(ls) / len(ls)
         if isinstance(sched, torch.optim.lr_scheduler.ReduceLROnPlateau):
             sched.step(last_loss)
@@ -32,3 +49,16 @@ def trainAR(*, trial=None, device=None, loader=None, noise=0.0, model=None, opti
             if trial.should_prune():
                 raise optuna.TrialPruned()
     return last_loss
+
+
+def add_one_tick(x, model, window=10**9):
+    x = torch.cat((x[-window:], torch.zeros(1, 1)), dim=1)
+    y = model(x.unsqueeze(0)).squeeze(0)
+    x[0, -1] = y[0, -1]
+    return x.clone()
+
+
+def generate(model, count, start=torch.zeros(1, 1), window=10**9):
+    for i in range(count):
+        start = add_one_tick(start, model, window)
+    return start

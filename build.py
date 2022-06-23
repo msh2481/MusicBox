@@ -4,6 +4,7 @@ from random import random
 import matplotlib.pyplot as plt
 import neptune.new as neptune
 import numpy as np
+import soundfile
 import torch
 from torch import nn
 from torch import optim as opt
@@ -13,7 +14,7 @@ from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
 
 from models import *
-from train import trainAR
+from train import generate, trainAR
 
 
 def ensure_download(remote_name, local_name=None):
@@ -102,12 +103,6 @@ def model_optim_sched(
     return m, o, s
 
 
-def kl_div(mu, logsigma):
-    assert mu.shape == logsigma.shape
-    loss = -0.5 * (1 + logsigma - torch.exp(logsigma) - mu**2).sum(dim=1).mean(dim=0)
-    return loss
-
-
 def criterion(**ignore):
     def result(input, target):
         mse = F.mse_loss(input, target)
@@ -129,12 +124,9 @@ class BaseLogger:
             self.upload(name, name + ".p")
         if self.sample_rate is not None and random() < self.sample_rate:
             name = f"sample_{epoch}"
-            sample = model.generate().detach().cpu().flatten(start_dim=0, end_dim=-2)
-            mu, sigma = sample.mean(), sample.std()
-            sample = sample.clip(mu - 3 * sigma, mu + 3 * sigma)
-            plt.imshow(sample)
-            plt.savefig(name + ".jpg")
-            self.upload(name, name + ".jpg")
+            sample = generate(model, 2**16).detach().cpu().flatten()
+            soundfile.write(name + ".wav", sample, 22050)
+            self.upload(name, name + ".wav")
 
 
 class ConsoleLogger(BaseLogger):

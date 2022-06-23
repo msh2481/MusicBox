@@ -1,6 +1,5 @@
-from models import *
+from models import ConvBlock
+from train import generate
 
-m = CausalConv(1, 1, 2, 1, True, 1)
-x = torch.randn((10, 1, 100))
-y = m(x)
-print(y.shape)
+m = ConvBlock(1, 1, 1, shift=1)
+y = generate(m, 10)

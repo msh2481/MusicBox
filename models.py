@@ -1,8 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import (BatchNorm1d, Conv1d, Identity, LeakyReLU, Sequential,
-                      Sigmoid, Tanh)
+from torch.nn import BatchNorm1d, Conv1d, Identity, LeakyReLU, Sequential, Sigmoid, Tanh
 
 
 def module_name(v):
@@ -86,58 +85,3 @@ def GatedConvBlock(in_channels, out_channels, dilation, shift=0):
 
 def Res(f):
     return Sum(Identity(), f)
-
-
-# class VAE(nn.Module):
-#     def __init__(self, encoder, mu_head, ls_head, decoder):
-#         super().__init__()
-#         self.encoder = encoder
-#         self.mu_head = mu_head
-#         self.ls_head = ls_head
-#         self.decoder = decoder
-#         self.register_buffer('last_z', None)
-#         self.register_buffer('z_mean', None)
-#         self.register_buffer('z_m2', None)
-#         self.register_buffer('z_std', None)
-#         self.register_buffer('z_cnt', None)
-
-#     def note_z(self, z):
-#         z = z[0:1].detach()
-#         self.last_z = z
-#         if self.z_cnt is None:
-#             self.z_mean = z
-#             self.z_m2 = torch.zeros_like(z)
-#             self.z_std = torch.zeros_like(z)
-#             self.z_cnt = torch.tensor(1.0)
-#         else:
-#             # update from https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-#             self.z_cnt += 1
-#             delta = z - self.z_mean
-#             self.z_mean += delta / self.z_cnt
-#             delta2 = z - self.z_mean
-#             self.z_m2 += delta * delta2
-#             self.z_std = torch.sqrt(self.z_m2 / self.z_cnt)
-
-#     def encode(self, x):
-#         t = self.encoder(x)
-#         mu, ls = self.mu_head(t), self.ls_head(t)
-#         self.note_z(mu)
-#         return mu, ls
-
-#     def sample(self, mu, logsigma):
-#         if logsigma is None:
-#             return mu
-#         assert mu.shape == logsigma.shape
-#         return mu + torch.randn_like(mu) * logsigma
-
-#     def decode(self, mu, logsigma):
-#         z = self.sample(mu, logsigma)
-#         return self.decoder(z)
-
-#     def generate_seen(self):
-#         self.eval()
-#         return self.decode(self.last_z, None)
-
-#     def generate(self):
-#         self.eval()
-#         return self.decode(self.z_mean, self.z_std)

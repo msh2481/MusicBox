@@ -1,10 +1,11 @@
-import librosa 
+import librosa
 import soundfile
-import torch 
+import torch
 import build
-import matplotlib.pyplot as plt 
-import numpy as np 
+import matplotlib.pyplot as plt
+import numpy as np
 from dct import sdct, isdct
+
 
 def save_audio(filename, spec):
     # spec = librosa.db_to_amplitude(spec)
@@ -12,10 +13,11 @@ def save_audio(filename, spec):
     S = isdct(spec, frame_step=256)
     soundfile.write(filename, S, 22050)
 
-spec = build.dataset('dataset_v4')[0][0]
+
+spec = build.dataset("dataset_v4")[0][0]
 
 
-model = build.saved_model('MUS-247', 'model_1.0')
+model = build.saved_model("MUS-247", "model_1.0")
 print(model.z_mean)
 # model.eval()
 
