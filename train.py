@@ -52,14 +52,14 @@ def trainAR(
 
 
 def add_one_tick(x, model, window=10**9):
-    x = torch.cat((x[-window:], torch.zeros(1, 1)), dim=1)
+    x = torch.cat((x[-window:], torch.zeros(1, 1, device=x.device)), dim=1)
     y = model(x.unsqueeze(0)).squeeze(0)
     x[0, -1] = y[0, -1]
     return x.clone()
 
 
 def generate(model, count, start=torch.zeros(1, 1), window=10**9):
-    start = start.to(next(iter(model.parameters())).device())
+    start = start.to(next(iter(model.parameters())).device)
     for i in range(count):
         start = add_one_tick(start, model, window)
     return start
