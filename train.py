@@ -4,14 +4,15 @@ from itertools import cycle
 from tqdm import tqdm
 import optuna
 
-def trainAR(*, trial=None, device=None, loader=None, model=None, optim=None, sched=None, criterion=None, logger=None, epochs=None, **ignore):
+def trainAR(*, trial=None, device=None, loader=None, noise=0.0, model=None, optim=None, sched=None, criterion=None, logger=None, epochs=None, **ignore):
     model.train()
     last_loss = None
     for epoch in tqdm(range(epochs)):
         ls = []
         for batch_num, (x, info) in enumerate(loader):
             x = x.to(device)
-            p = model(x)
+            aug = x.clone() + torch.randn_like(x) * noise * x.std()
+            p = model(aug)
             l, parts = criterion(input=p, target=x)
             optim.zero_grad()
             l.backward()

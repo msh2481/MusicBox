@@ -1,16 +1,19 @@
 import os
-from matplotlib.cbook import ls_mapper
-import torch
-from torch import nn, optim as opt
+from random import random
+
+import matplotlib.pyplot as plt
+import neptune.new as neptune
 import numpy as np
-from torch.optim import lr_scheduler as sch
+import torch
+from torch import nn
+from torch import optim as opt
 from torch.nn import functional as F
+from torch.optim import lr_scheduler as sch
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
-import neptune.new as neptune
-from random import random
-import matplotlib.pyplot as plt
+
 from models import *
+from train import trainAR
 
 
 def ensure_download(remote_name, local_name=None):
@@ -166,8 +169,6 @@ def logger(*, console=None, **kwargs):
 
 
 def run(cfg):
-    from train import trainVAE
-
     trainer = eval(cfg["trainer"])
     m, o, s = model_optim_sched(**cfg)
     return trainer(
