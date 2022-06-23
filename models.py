@@ -1,23 +1,22 @@
-from matplotlib.pyplot import isinteractive
-from sklearn.neighbors import KNeighborsTransformer
 import torch
-from torch import nn, optim
-from torch.nn import Identity as Id, BatchNorm1d, Sequential, LeakyReLU, Conv1d
-from math import ceil
+from torch import nn
+from torch.nn import BatchNorm1d, Sequential, LeakyReLU, Conv1d, Tanh, Sigmoid, Identity
 import torch.nn.functional as F
 
 
 def module_name(v):
-    return str(v).split('\n')[0]
+    return str(v).split("\n", maxsplit=1)[0]
 
 
 def module_dfs(v):
     sons = list(v.children())
-    return module_name(v) + ','.join(module_dfs(u) for u in sons) + ')' if len(sons) else str(v)
+    return (
+        module_name(v) + ",".join(module_dfs(u) for u in sons) + ")" if sons else str(v)
+    )
 
 
 def module_description(model):
-    return ''.join(module_dfs(model))
+    return "".join(module_dfs(model))
 
 
 class Activation(LeakyReLU):
@@ -25,97 +24,68 @@ class Activation(LeakyReLU):
         super().__init__(negative_slope)
 
 
-class CausalConv(Conv1d):
-    def __init__(self, in_channels, out_channels, kernel_size, dilation, shift=0, bias=True):
-        super().__init__(in_channels, out_channels,
-                         kernel_size, dilation=dilation, bias=bias)
-        self.shift = shift
-        self.use_bias = bias
-        self.padding_shape = (dilation * (kernel_size - 1) + shift, -shift)
+class Padded(nn.Module):
+    def __init__(self, padding, f):
+        super().__init__()
+        self.padding = padding
+        self.f = f
 
     def forward(self, x):
-        return super().forward(F.pad(x, self.padding_shape))
+        return self.f(F.pad(x, self.padding))
 
     def extra_repr(self):
-        return f'{self.in_channels}, {self.out_channels}, kernel_size={self.kernel_size[0]}, dilation={self.dilation[0]}, shift={self.shift}, bias={self.use_bias}'
+        return f"padding={self.padding}"
 
-class TypeI(nn.Module):
-    def __init__(self, in_channels, out_channels, dilation, shift=0):
-        super().__init__()
-        self.bn = BatchNorm1d(in_channels)
-        self.act = Activation()
-        self.conv = CausalConv(in_channels, out_channels, 2, dilation, shift, False)
-    def forward(self, x):
-        x = self.bn(x)
-        x = self.act(x)
-        x = self.conv(x)
-        return x
 
-class TypeII(nn.Module):
-    def __init__(self, in_channels, out_channels, dilation, shift=0):
+class Product(nn.Module):
+    def __init__(self, f, g):
         super().__init__()
-        self.bn = BatchNorm1d(in_channels)
-        self.conv_sigma = CausalConv(in_channels, out_channels, 2, dilation, shift, False)
-        self.conv_tanh = CausalConv(in_channels, out_channels, 2, dilation, shift, False)
+        self.f, self.g = f, g
 
     def forward(self, x):
-        x = self.bn(x)
-        a = torch.sigmoid(self.conv_sigma(x))
-        b = torch.tanh(self.conv_tanh(x))
-        return a * b
+        return self.f(x) * self.g(x)
 
-class TypeIII(nn.Module):
-    def __init__(self, in_channels, out_channels, dilation):
-        assert in_channels == out_channels
+
+class Sum(nn.Module):
+    def __init__(self, f, g):
         super().__init__()
-        self.bn = BatchNorm1d(in_channels)
-        self.conv_sigma = CausalConv(in_channels, out_channels, 2, dilation, 0, False)
-        self.conv_tanh = CausalConv(in_channels, out_channels, 2, dilation, 0, False)
+        self.f, self.g = f, g
 
     def forward(self, x):
-        t = self.bn(x)
-        a = torch.sigmoid(self.conv_sigma(t))
-        b = torch.tanh(self.conv_tanh(t))
-        return x + a * b
-
-# class Sum(nn.Module):
-#     def __init__(self, f, g):
-#         super().__init__()
-#         self.f = f
-#         self.g = g
-#     def forward(self, x):
-#         return self.f(x) + self.g(x)
+        return self.f(x) + self.g(x)
 
 
-# def ConvBlock(conv_type, in_channels, out_channels, in_size, out_size, kernel_size, stride, bias=False):
-#     return Sequential(
-#             BatchNorm2d(in_channels),
-#             Activation(),
-#             conv_type(in_channels, out_channels, in_size, out_size, kernel_size, stride, bias)
-#         )
+def CausalConv(in_channels, out_channels, kernel_size, dilation, shift=0):
+    return Padded(
+        (dilation * (kernel_size - 1) + shift, -shift),
+        Conv1d(
+            in_channels,
+            out_channels,
+            kernel_size,
+            dilation=dilation,
+            bias=False,
+        ),
+    )
 
-# def ResSimple(conv_type, channels, kernel_size, stride):
-#     return Sum(
-#         Id(),
-#         Sequential(
-#             ConvBlock(conv_type, channels, channels, kernel_size, kernel_size, kernel_size, stride),
-#             ConvBlock(conv_type, channels, channels, kernel_size, kernel_size, kernel_size, stride)
-#         )
-#     )
 
-# def ResLearned(conv_type, in_channels, out_channels, in_size, out_size, kernel_size, stride):
-#     mid_channels = round((in_channels * out_channels) ** 0.5)
-#     mid_size = round((in_size * out_size) ** 0.5)
-#     return Sum(
-#         Sequential(
-#             BatchNorm2d(in_channels),
-#             conv_type(in_channels, out_channels, in_size, out_size, stride ** 2, stride ** 2, bias=False)
-#         ),
-#         Sequential(
-#             ConvBlock(conv_type, in_channels, mid_channels, in_size, mid_size, kernel_size, stride),
-#             ConvBlock(conv_type, mid_channels, out_channels, mid_size, out_size, kernel_size, stride)
-#         )
-#     )
+def ConvBlock(in_channels, out_channels, dilation, shift=0):
+    return Sequential(
+        BatchNorm1d(in_channels),
+        Activation(),
+        CausalConv(in_channels, out_channels, 2, dilation, shift),
+    )
+
+
+def GatedConvBlock(in_channels, out_channels, dilation, shift=0):
+    return Product(
+        Sequential(ConvBlock(in_channels, out_channels, dilation, shift), Tanh()),
+        Sequential(ConvBlock(in_channels, out_channels, dilation, shift), Sigmoid()),
+    )
+
+
+def Res(f):
+    return Sum(Identity(), f)
+
 
 # class VAE(nn.Module):
 #     def __init__(self, encoder, mu_head, ls_head, decoder):
