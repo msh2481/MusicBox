@@ -1,5 +1,10 @@
-from models import ConvBlock
-from train import generate
+from telnetlib import SE
+from models import *
 
-m = ConvBlock(1, 1, 1, shift=1)
-y = generate(m, 10)
+# m = Padded((1, 1), Identity())
+m = Padded((1, 1), Identity())
+s = repr(m)
+# print(eval(s))
+# print(m)
+# print(repr(m))
+print(module_description(m))

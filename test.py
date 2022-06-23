@@ -1,15 +1,24 @@
 import unittest
-import build
-import torch
 from time import time
+
+import torch
+
+import build
 from models import (
-    module_description,
-    Sequential,
-    CausalConv,
     Activation,
+    BatchNorm1d,
+    CausalConv,
+    ConstantPad1d,
+    Conv1d,
     ConvBlock,
     GatedConvBlock,
+    Identity,
+    Padded,
+    Product,
     Res,
+    Sequential,
+    Sum,
+    module_description,
 )
 from train import *
 
@@ -61,12 +70,12 @@ class Datasets(unittest.TestCase):
         self.assertLessEqual(x.max().item(), 30)
         self.assertEqual(y.dtype, torch.long)
         self.assertEqual(y.item(), 0)
-    
+
     def testV5(self):
         data = build.dataset("dataset_v5")
         self.assertEqual(len(data), 1000)
         x, y = data[0]
-        self.assertEqual(x.shape, (1, 2 ** 16))
+        self.assertEqual(x.shape, (1, 2**16))
         self.assertEqual(x.dtype, torch.float32)
         self.assertLessEqual(-6, x.min().item())
         self.assertLessEqual(x.max().item(), 6)
@@ -117,6 +126,38 @@ class DataLoaders(unittest.TestCase):
             pass
         dur = time() - t0
         self.assertLess(dur, 0.5)
+
+
+class Representation(unittest.TestCase):
+    def help(self, model):
+        desc = module_description(model)
+        model2 = eval(desc)
+        desc2 = module_description(model2)
+        self.assertEqual(desc, desc2)
+
+    def testPadded(self):
+        model = Padded((1, 1), Identity())
+        self.help(model)
+
+    def testCausalConv(self):
+        model = CausalConv(1, 1, 1, 0)
+        self.help(model)
+
+    def testConvBlock(self):
+        model = ConvBlock(1, 1, 1, 0)
+        self.help(model)
+
+    def testSum(self):
+        model = Sum(Identity(), ConvBlock(1, 1, 1, 0))
+        self.help(model)
+
+    def testProduct(self):
+        model = Product(Identity(), ConvBlock(1, 1, 1, 0))
+        self.help(model)
+
+    def testRes(self):
+        model = Res(ConvBlock(1, 1, 1, 0))
+        self.help(model)
 
 
 class Models(unittest.TestCase):

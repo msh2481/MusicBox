@@ -2,4 +2,5 @@
 /.neptune/
 /Data/
 /mnist/
+/lightning_logs/
 *.p

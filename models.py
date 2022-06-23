@@ -1,7 +1,16 @@
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import BatchNorm1d, Conv1d, Identity, LeakyReLU, Sequential, Sigmoid, Tanh
+from torch.nn import (
+    BatchNorm1d,
+    ConstantPad1d,
+    Conv1d,
+    Identity,
+    LeakyReLU,
+    Sequential,
+    Sigmoid,
+    Tanh,
+)
 
 
 def module_name(v):
@@ -23,19 +32,11 @@ class Activation(LeakyReLU):
     def __init__(self, negative_slope=0.2):
         super().__init__(negative_slope)
 
-
-class Padded(nn.Module):
-    def __init__(self, padding, f):
-        super().__init__()
-        self.padding = padding
-        self.f = f
-
-    def forward(self, x):
-        return self.f(F.pad(x, self.padding))
-
-    def extra_repr(self):
-        return f"padding={self.padding}"
-
+def Padded(padding, module):
+    return Sequential(
+        ConstantPad1d(padding, 0),
+        module
+    )
 
 class Product(nn.Module):
     def __init__(self, f, g):
