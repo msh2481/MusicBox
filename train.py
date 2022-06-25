@@ -59,8 +59,9 @@ def add_one_tick(x, model, window=10**9):
         return x.detach()
 
 
-def generate(model, count, start=torch.zeros(1, 1), window=10**9, show_progress=False):
-    start = start.to(next(iter(model.parameters())).device)
+def generate(
+    model, count, start=torch.zeros(1, 1), window=10**9, show_progress=False
+):
     count_iter = tqdm(range(count)) if show_progress else range(count)
     for i in count_iter:
         start = add_one_tick(start, model, window)

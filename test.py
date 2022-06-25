@@ -4,6 +4,7 @@ from time import time
 import torch
 
 import build
+from mu_law import mu_encode, mu_decode
 from models import (
     Activation,
     BatchNorm1d,
@@ -40,13 +41,6 @@ class Datasets(unittest.TestCase):
         self.assertEqual(x.dtype, torch.float32)
         self.assertLessEqual(-100, x.min().item())
         self.assertLessEqual(x.max().item(), 0.1)
-        self.assertEqual(y, 0)
-
-    def testOverfit(self):
-        data = build.dataset("dataset_v2_overfit")
-        self.assertEqual(len(data), 1)
-        x, y = data[0]
-        self.assertEqual(x.shape, (128, 11))
         self.assertEqual(y, 0)
 
     def testV3(self):
@@ -105,15 +99,6 @@ class DataLoaders(unittest.TestCase):
             pass
         dur = time() - t0
         self.assertLess(dur, 0.1)
-
-    def testOverfit(self):
-        loader = build.dataloader(data="dataset_v2_overfit", batch_size=1)
-        self.assertEqual(len(loader), 1)
-        t0 = time()
-        for batch in loader:
-            pass
-        dur = time() - t0
-        self.assertLess(dur, 0.01)
 
     def testV3(self):
         loader = build.dataloader(data="dataset_v3", batch_size=64)
@@ -186,6 +171,11 @@ class Models(unittest.TestCase):
         self.assertEqual(y.shape, x.shape)
         print(model)
 
-
-if __name__ == "__main__":
-    unittest.main()
+class MuLaw(unittest.TestCase):
+    def testEncodeDecode(self):
+        x = torch.randn(10)
+        y = mu_encode(x)
+        self.assertEqual(y.shape, x.shape)
+        x2 = mu_decode(y)
+        self.assertEqual(x2.shape, x.shape)
+        self.assertTrue(torch.isclose(x, x2).all())

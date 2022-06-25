@@ -30,7 +30,6 @@ def ensure_download(remote_name, local_name=None):
 def normalize(x):
     return (x - x.mean()) / x.std()
 
-
 def dataset_chooser(name):
     if name == "mnist":
         return datasets.MNIST(
@@ -59,6 +58,11 @@ def dataset_chooser(name):
         ensure_download("X_v5", "X_v5.p")
         ensure_download("y_v5", "y_v5.p")
         X, y = torch.load("X_v5.p"), torch.load("y_v5.p")
+        return [(X[i], y[i]) for i in range(len(X))]
+    if name == "dataset_v6":
+        ensure_download("X_v6", "X_v6.p")
+        ensure_download("y_v6", "y_v6.p")
+        X, y = torch.load("X_v6.p"), torch.load("y_v6.p")
         return [(X[i], y[i]) for i in range(len(X))]
     assert False, f"unknown dataset {name}"
 

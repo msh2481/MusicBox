@@ -9,6 +9,7 @@ from torch.nn import (
     LeakyReLU,
     Sequential,
     Sigmoid,
+    Softmax,
     Tanh,
 )
 
@@ -32,11 +33,10 @@ class Activation(LeakyReLU):
     def __init__(self, negative_slope=0.2):
         super().__init__(negative_slope)
 
+
 def Padded(padding, module):
-    return Sequential(
-        ConstantPad1d(padding, 0),
-        module
-    )
+    return Sequential(ConstantPad1d(padding, 0), module)
+
 
 class Product(nn.Module):
     def __init__(self, f, g):

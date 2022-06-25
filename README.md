@@ -9,11 +9,4 @@
 |`X_v3`, `y_v3`|as previous, but with all classes, targets and (1, 128, 1024) shape|
 |`X_v4`, `y_v4`|now with Discrete Cosine Transform and (1, 256, 256)|
 |`X_v5`, `y_v5`|normalized waveforms, (1, 2**16)|
-
-### TODO
-Other optimizers
-Conditional models
-GAN
-Additional model for Spec -> Wave
-Iterative inference?
-LSTM and other sequence models
+|`X_v6`, `y_v6`|mu-law encoded waveforms, (1, 2**16)|
