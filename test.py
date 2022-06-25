@@ -19,6 +19,7 @@ from models import (
     Res,
     Sequential,
     Sum,
+    SkipConnected,
     module_description,
 )
 from train import *
@@ -169,7 +170,19 @@ class Models(unittest.TestCase):
         x = torch.randn((64, 1, 10))
         y = model(x)
         self.assertEqual(y.shape, x.shape)
-        print(model)
+
+    def testSkipConnected(self):
+        model = Sequential(
+            ConvBlock(1, 10, 1, shift=1),
+            SkipConnected(
+                ConvBlock(10, 10, 2),
+                ConvBlock(10, 10, 4),
+            ),
+            ConvBlock(10, 1, 1, shift=1),
+        )
+        x = torch.randn((64, 1, 10))
+        y = model(x)
+        self.assertEqual(y.shape, x.shape)
 
 class MuLaw(unittest.TestCase):
     def testEncodeDecode(self):

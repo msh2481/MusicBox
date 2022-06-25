@@ -37,6 +37,13 @@ class Activation(LeakyReLU):
 def Padded(padding, module):
     return Sequential(ConstantPad1d(padding, 0), module)
 
+class SkipConnected(nn.Sequential):
+    def forward(self, x):
+        output = x
+        for module in self:
+            x = module(x)
+            output = output + x
+        return output
 
 class Product(nn.Module):
     def __init__(self, f, g):
