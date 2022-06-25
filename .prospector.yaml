@@ -1,7 +1,0 @@
-strictness: verylow
-test-warnings: true
-doc-warnings: false
-
-pyilnt:
-  disable:
-    # unused-import
