@@ -30,6 +30,20 @@ def ensure_download(remote_name, local_name=None):
 def normalize(x):
     return (x - x.mean()) / x.std()
 
+class OneHotData(torch.utils.data.Dataset):
+    def __init__(self, X, y, num_classes):
+        self.X = X
+        self.y = y
+        self.num_classes = num_classes
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        t = self.X[idx]
+        return F.one_hot(self.X[idx].long(), num_classes=self.num_classes).t().float(), self.y[idx]
+
+
 def dataset_chooser(name):
     if name == "mnist":
         return datasets.MNIST(
@@ -63,7 +77,7 @@ def dataset_chooser(name):
         ensure_download("X_v6", "X_v6.p")
         ensure_download("y_v6", "y_v6.p")
         X, y = torch.load("X_v6.p"), torch.load("y_v6.p")
-        return [(X[i], y[i]) for i in range(len(X))]
+        return OneHotData(X, y, 256)
     assert False, f"unknown dataset {name}"
 
 

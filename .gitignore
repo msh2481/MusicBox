@@ -4,3 +4,4 @@
 /mnist/
 /lightning_logs/
 *.p
+*.yaml
