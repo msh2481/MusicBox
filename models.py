@@ -88,8 +88,8 @@ def ConvBlock(in_channels, out_channels, dilation, shift=0):
 
 def GatedConvBlock(in_channels, out_channels, dilation, shift=0):
     return Product(
-        Sequential(ConvBlock(in_channels, out_channels, dilation, shift), Tanh()),
-        Sequential(ConvBlock(in_channels, out_channels, dilation, shift), Sigmoid()),
+        Sequential(CausalConv(in_channels, out_channels, dilation, shift), Tanh()),
+        Sequential(CausalConv(in_channels, out_channels, dilation, shift), Sigmoid()),
     )
 
 

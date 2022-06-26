@@ -53,10 +53,10 @@ def trainAR(
 
 def add_one_tick(x, model, window=10**9):
     with torch.no_grad():
-        x = torch.cat((x[-window:], torch.zeros(256, 1, device=x.device)), dim=1)
+        x = torch.cat((x[:, -window:], torch.zeros(256, 1, device=x.device)), dim=1)
         y = model(x.unsqueeze(0)).squeeze(0)
         x[y[:, -1].argmax(), -1] = 1
-        return x.detach()
+        return x[:, -1:].detach()
 
 
 def generate(
@@ -64,5 +64,5 @@ def generate(
 ):
     count_iter = tqdm(range(count)) if show_progress else range(count)
     for i in count_iter:
-        start = add_one_tick(start, model, window)
+        start = torch.cat((start, add_one_tick(start, model, window)), dim=1)
     return start
