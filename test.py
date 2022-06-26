@@ -14,6 +14,7 @@ from models import (
     ConvBlock,
     GatedConvBlock,
     Identity,
+    Linear,
     Padded,
     Product,
     Res,
@@ -144,6 +145,14 @@ class Representation(unittest.TestCase):
     def testRes(self):
         model = Res(ConvBlock(1, 1, 1, 0))
         self.help(model)
+        opt = torch.optim.Adam(model.parameters(), lr=1)
+        x = torch.randn((16, 1, 10))
+        y = model(x)
+        self.assertTrue(torch.allclose(x, y))
+        y.sum().backward()
+        opt.step()
+        y = model(x)
+        self.assertFalse(torch.allclose(x, y))
 
 
 class Models(unittest.TestCase):

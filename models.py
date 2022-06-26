@@ -7,6 +7,8 @@ from torch.nn import (
     Conv1d,
     Identity,
     LeakyReLU,
+    Linear,
+    Parameter,
     Sequential,
     Sigmoid,
     Softmax,
@@ -37,6 +39,7 @@ class Activation(LeakyReLU):
 def Padded(padding, module):
     return Sequential(ConstantPad1d(padding, 0), module)
 
+
 class SkipConnected(nn.Sequential):
     def forward(self, x):
         output = x
@@ -44,6 +47,7 @@ class SkipConnected(nn.Sequential):
             x = module(x)
             output = output + x
         return output
+
 
 class Product(nn.Module):
     def __init__(self, f, g):
@@ -71,14 +75,12 @@ def CausalConv(in_channels, out_channels, kernel_size, dilation, shift=0):
             out_channels,
             kernel_size,
             dilation=dilation,
-            bias=False,
         ),
     )
 
 
 def ConvBlock(in_channels, out_channels, dilation, shift=0):
     return Sequential(
-        BatchNorm1d(in_channels),
         Activation(),
         CausalConv(in_channels, out_channels, 2, dilation, shift),
     )
@@ -91,5 +93,11 @@ def GatedConvBlock(in_channels, out_channels, dilation, shift=0):
     )
 
 
-def Res(f):
-    return Sum(Identity(), f)
+class Res(nn.Module):
+    def __init__(self, f):
+        super().__init__()
+        self.f = f
+        self.k = Parameter(torch.tensor(0.))
+
+    def forward(self, x):
+        return x + self.k * self.f(x)
