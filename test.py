@@ -192,6 +192,12 @@ class Models(unittest.TestCase):
         x = torch.randn((64, 1, 10))
         y = model(x)
         self.assertEqual(y.shape, x.shape)
+    
+    def testGatedConvBlock(self):
+        model = GatedConvBlock(256, 256, 2)
+        x = torch.randn((64, 256, 1000))
+        y = model(x)
+        self.assertEqual(y.shape, x.shape)
 
 class MuLaw(unittest.TestCase):
     def testEncodeDecode(self):
