@@ -39,14 +39,13 @@ class Activation(LeakyReLU):
 def Padded(padding, module):
     return Sequential(ConstantPad1d(padding, 0), module)
 
-class AdaptiveBN(nn.Module):
-    def __init__(self, in_channels):
-        super().__init__()
-        self.bn = BatchNorm1d(in_channels)
+class AdaptiveBN(BatchNorm1d):
+    def __init__(self, in_channels, **kwargs):
+        super().__init__(in_channels, **kwargs)
         self.k = Parameter(torch.tensor(0.5))
 
     def forward(self, x):
-        return self.bn(x) * self.k + x * (1 - self.k)
+        return super().forward(x) * self.k + x * (1 - self.k)
 
 class SkipConnected(nn.Sequential):
     def forward(self, x):

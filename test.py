@@ -7,6 +7,7 @@ import build
 from mu_law import mu_encode, mu_decode
 from models import (
     Activation,
+    AdaptiveBN,
     BatchNorm1d,
     CausalConv,
     ConstantPad1d,
@@ -14,6 +15,7 @@ from models import (
     ConvBlock,
     GatedConvBlock,
     Identity,
+    LeakyReLU,
     Linear,
     Padded,
     Product,
@@ -154,6 +156,9 @@ class Representation(unittest.TestCase):
         y = model(x)
         self.assertFalse(torch.allclose(x, y))
 
+    def testAdaptiveBN(self):
+        model = AdaptiveBN(10)
+        self.help(model)
 
 class Models(unittest.TestCase):
     def testCausalConv(self):
@@ -196,6 +201,16 @@ class Models(unittest.TestCase):
     def testGatedConvBlock(self):
         model = GatedConvBlock(256, 256, 2)
         x = torch.randn((64, 256, 1000))
+        y = model(x)
+        self.assertEqual(y.shape, x.shape)
+
+    def testAdaptiveBN(self):
+        model = Sequential(
+            CausalConv(256, 256, 1, 1),
+            AdaptiveBN(256),
+            CausalConv(256, 256, 1, 1)
+        )
+        x = torch.randn((64, 256, 10))
         y = model(x)
         self.assertEqual(y.shape, x.shape)
 
