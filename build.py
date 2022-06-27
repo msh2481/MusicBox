@@ -1,5 +1,5 @@
 import os
-from random import random
+from random import random, sample
 
 import matplotlib.pyplot as plt
 import neptune.new as neptune
@@ -50,7 +50,7 @@ class OneHotData(torch.utils.data.Dataset):
         return F.one_hot(indices.long(), num_classes=self.num_classes).t().float(), self.y[idx]
 
 
-def dataset_chooser(name):
+def dataset_chooser(name, sample_length=None):
     if name == "mnist":
         return datasets.MNIST(
             root="mnist",
@@ -82,13 +82,13 @@ def dataset_chooser(name):
     if name == "dataset_v6":
         ensure_download("X_v6", "X_v6.p")
         ensure_download("y_v6", "y_v6.p")
-        X, y = torch.load("X_v6.p")[:, ::2], torch.load("y_v6.p")
-        return OneHotData(X, y, 256, 4096)
+        X, y = torch.load("X_v6.p"), torch.load("y_v6.p")
+        return OneHotData(X, y, 256, sample_length)
     assert False, f"unknown dataset {name}"
 
 
-def dataset(name, part=1):
-    data = dataset_chooser(name)
+def dataset(name, sample_length=None, part=1):
+    data = dataset_chooser(name, sample_length=sample_length)
     full = len(data)
     need = round(full * part)
     return Subset(data, np.arange(need))
@@ -97,6 +97,7 @@ def dataset(name, part=1):
 def dataloader(
     *,
     data=None,
+    sample_length=None,
     part=1,
     batch_size=None,
     shuffle=True,
@@ -105,7 +106,7 @@ def dataloader(
     **ignore,
 ):
     return DataLoader(
-        dataset(data, part=part),
+        dataset(data, sample_length=sample_length, part=part),
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
