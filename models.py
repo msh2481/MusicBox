@@ -168,8 +168,8 @@ class WaveNet(Module):
             x = gate(x)
             skip_sum = skip_sum + x
             x = x0 + bn(res(x))
-        x = F.relu(self.bn1(skip_sum))
-        x = F.relu(self.bn2(self.end_conv1(x)))
+        x = F.mish(self.bn1(skip_sum))
+        x = F.mish(self.bn2(self.end_conv1(x)))
         return self.end_conv2(x)
 
     def alt_repr(self):
