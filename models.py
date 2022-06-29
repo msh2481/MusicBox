@@ -13,6 +13,7 @@ from torch.nn import (
     Module,
     ModuleList,
     Parameter,
+    ParameterList,
     Sequential,
     Sigmoid,
     Softmax,
@@ -146,26 +147,28 @@ class WaveNet(Module):
         self.gate = ModuleList()
         self.res = ModuleList()
         self.skip = ModuleList()
+        self.alpha = ParameterList()
         for block, layer in product(range(blocks), range(layers)):
             self.gate.append(
                 GatedConvBlock(residual_channels, residual_channels, 2**layers)
             )
             self.res.append(CausalConv(residual_channels, residual_channels, 1, 1))
             self.skip.append(CausalConv(residual_channels, skip_channels, 1, 1))
+            self.alpha.append(Parameter(torch.tensor(0.)))
         self.end_conv1 = CausalConv(residual_channels, end_channels, 1, 1)
         self.end_conv2 = CausalConv(end_channels, classes, 1, 1)
 
     def forward(self, x):
         x = self.start_conv(x)
         skip_sum = 0
-        for gate, res, skip in zip(self.gate, self.res, self.skip):
+        for alpha, gate, res, skip in zip(self.alpha, self.gate, self.res, self.skip):
             x0 = x
             x = gate(x)
             skip_sum = skip_sum + x
-            x = x0 + res(x)
+            x = x0 + alpha * res(x)
         x = F.relu(skip_sum)
         x = F.relu(self.end_conv1(x))
         return self.end_conv2(x)
-    
+
     def alt_repr(self):
         return f"WaveNet({self.layers}, {self.blocks}, {self.residual_channels}, {self.skip_channels}, {self.end_channels}, {self.classes})"
