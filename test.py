@@ -4,7 +4,6 @@ from time import time
 import torch
 
 import build
-from mu_law import mu_encode, mu_decode
 from models import (
     Activation,
     AdaptiveBN,
@@ -17,98 +16,29 @@ from models import (
     Identity,
     LeakyReLU,
     Linear,
+    Module,
+    ModuleList,
     Padded,
     Product,
     Res,
     Sequential,
-    Sum,
+    Sigmoid,
     SkipConnected,
+    Sum,
+    Tanh,
+    WaveNet,
     module_description,
 )
+from mu_law import mu_decode, mu_encode
 from train import *
 
 
-class Datasets(unittest.TestCase):
-    def testMNIST(self):
-        data = build.dataset("mnist")
-        self.assertEqual(len(data), 60000)
-        x, y = data[0]
-        self.assertEqual(x.shape, (1, 32, 32))
-        self.assertEqual(x.dtype, torch.float32)
-        self.assertTrue(isinstance(y, int))
-
-    def testV2(self):
-        data = build.dataset("dataset_v2")
-        self.assertEqual(len(data), 100)
-        x, y = data[0]
-        self.assertEqual(x.shape, (128, 1025))
-        self.assertEqual(x.dtype, torch.float32)
-        self.assertLessEqual(-100, x.min().item())
-        self.assertLessEqual(x.max().item(), 0.1)
-        self.assertEqual(y, 0)
-
-    def testV3(self):
-        data = build.dataset("dataset_v3")
-        self.assertEqual(len(data), 1000)
-        x, y = data[0]
-        self.assertEqual(x.shape, (1, 128, 1024))
-        self.assertEqual(x.dtype, torch.float32)
-        self.assertLessEqual(-100, x.min().item())
-        self.assertLessEqual(x.max().item(), 0.1)
-        self.assertEqual(y.dtype, torch.long)
-        self.assertEqual(y.item(), 0)
-
-    def testV4(self):
-        data = build.dataset("dataset_v4")
-        self.assertEqual(len(data), 1000)
-        x, y = data[0]
-        self.assertEqual(x.shape, (1, 256, 256))
-        self.assertEqual(x.dtype, torch.float32)
-        self.assertLessEqual(-30, x.min().item())
-        self.assertLessEqual(x.max().item(), 30)
-        self.assertEqual(y.dtype, torch.long)
-        self.assertEqual(y.item(), 0)
-
-    def testV5(self):
-        data = build.dataset("dataset_v5")
-        self.assertEqual(len(data), 1000)
-        x, y = data[0]
-        self.assertEqual(x.shape, (1, 2**16))
-        self.assertEqual(x.dtype, torch.float32)
-        self.assertLessEqual(-6, x.min().item())
-        self.assertLessEqual(x.max().item(), 6)
-        self.assertEqual(y.dtype, torch.long)
-        self.assertEqual(y.item(), 0)
-
-
 class DataLoaders(unittest.TestCase):
-    def testMNISTLoader(self):
-        loader = build.dataloader(
-            data="mnist", batch_size=128, num_workers=0, trash=(1, 2)
-        )
-        self.assertEqual(len(loader), 469)
+    def testV6(self):
+        loader = build.dataloader(data="dataset_v6", sample_length=100, batch_size=20)
+        self.assertEqual(len(loader), 50)
         x, y = next(iter(loader))
-        self.assertEqual(x.shape, (128, 1, 32, 32))
-        self.assertEqual(x.dtype, torch.float32)
-        self.assertEqual(y.dtype, torch.long)
-
-    def testV2(self):
-        loader = build.dataloader(data="dataset_v2", batch_size=4)
-        self.assertEqual(len(loader), 25)
-        x, y = next(iter(loader))
-        self.assertEqual(x.shape, (4, 128, 1025))
-        self.assertEqual(x.dtype, torch.float32)
-        t0 = time()
-        for batch in loader:
-            pass
-        dur = time() - t0
-        self.assertLess(dur, 0.1)
-
-    def testV3(self):
-        loader = build.dataloader(data="dataset_v3", batch_size=64)
-        self.assertEqual(len(loader), 16)
-        x, y = next(iter(loader))
-        self.assertEqual(x.shape, (64, 1, 128, 1024))
+        self.assertEqual(x.shape, (20, 256, 100))
         self.assertNotEqual(y.min(), y.max())
         t0 = time()
         for batch in loader:
@@ -160,6 +90,11 @@ class Representation(unittest.TestCase):
         model = AdaptiveBN(10)
         self.help(model)
 
+    def testWaveNet(self):
+        model = WaveNet(3, 2, 10, 20, 30, 40)
+        self.help(model)
+
+
 class Models(unittest.TestCase):
     def testCausalConv(self):
         model = Sequential(
@@ -197,7 +132,7 @@ class Models(unittest.TestCase):
         x = torch.randn((64, 1, 10))
         y = model(x)
         self.assertEqual(y.shape, x.shape)
-    
+
     def testGatedConvBlock(self):
         model = GatedConvBlock(256, 256, 2)
         x = torch.randn((64, 256, 1000))
@@ -206,13 +141,18 @@ class Models(unittest.TestCase):
 
     def testAdaptiveBN(self):
         model = Sequential(
-            CausalConv(256, 256, 1, 1),
-            AdaptiveBN(256),
-            CausalConv(256, 256, 1, 1)
+            CausalConv(256, 256, 1, 1), AdaptiveBN(256), CausalConv(256, 256, 1, 1)
         )
         x = torch.randn((64, 256, 10))
         y = model(x)
         self.assertEqual(y.shape, x.shape)
+
+    def testWaveNet(self):
+        model = WaveNet(3, 2, 10, 20, 30, 40)
+        x = torch.randn((64, 40, 1000))
+        y = model(x)
+        self.assertEqual(y.shape, x.shape)
+
 
 class MuLaw(unittest.TestCase):
     def testEncodeDecode(self):
@@ -222,3 +162,6 @@ class MuLaw(unittest.TestCase):
         x2 = mu_decode(y)
         self.assertEqual(x2.shape, x.shape)
         self.assertTrue(torch.isclose(x, x2).all())
+
+model = WaveNet(3, 2, 10, 20, 30, 40)
+print((model))
