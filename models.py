@@ -146,6 +146,7 @@ class WaveNet(Module):
         self.start_conv = CausalConv(classes, residual_channels, 1, 1, shift=1)
         self.gate = ModuleList()
         self.res = ModuleList()
+        self.bn = ModuleList()
         self.skip = ModuleList()
         for block, layer in product(range(blocks), range(layers)):
             self.gate.append(
@@ -153,19 +154,22 @@ class WaveNet(Module):
             )
             self.res.append(CausalConv(residual_channels, residual_channels, 1, 1))
             self.skip.append(CausalConv(residual_channels, skip_channels, 1, 1))
+            self.bn.append(BatchNorm1d(residual_channels))
+        self.bn1 = BatchNorm1d(residual_channels)
         self.end_conv1 = CausalConv(residual_channels, end_channels, 1, 1)
+        self.bn2 = BatchNorm1d(end_channels)
         self.end_conv2 = CausalConv(end_channels, classes, 1, 1)
 
     def forward(self, x):
         x = self.start_conv(x)
         skip_sum = 0
-        for gate, res, skip in zip(self.gate, self.res, self.skip):
+        for gate, res, skip, bn in zip(self.gate, self.res, self.skip, self.bn):
             x0 = x
             x = gate(x)
             skip_sum = skip_sum + x
-            x = x0 + res(x)
-        x = F.mish(skip_sum)
-        x = F.mish(self.end_conv1(x))
+            x = x0 + bn(res(x))
+        x = F.relu(self.bn1(skip_sum))
+        x = F.relu(self.bn2(self.end_conv1(x)))
         return self.end_conv2(x)
 
     def alt_repr(self):
