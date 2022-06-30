@@ -7,7 +7,6 @@ from torch.nn import (
     BatchNorm1d,
     ConstantPad1d,
     Conv1d,
-    ChannelShuffle,
     Identity,
     LeakyReLU,
     Linear,
@@ -242,6 +241,49 @@ class GroupNet(Module):
     def alt_repr(self):
         return f"GroupNet({self.layers}, {self.blocks}, {self.residual_channels}, {self.skip_channels}, {self.end_channels}, {self.classes}, {self.gate_groups}, {self.residual_groups}, {self.skip_groups}, {self.end_groups})"
 
+def channel_shuffle(x,
+                    groups):
+    """
+    Channel shuffle operation from 'ShuffleNet: An Extremely Efficient Convolutional Neural Network for Mobile Devices,'
+    https://arxiv.org/abs/1707.01083.
+    Parameters:
+    ----------
+    x : Tensor
+        Input tensor.
+    groups : int
+        Number of groups.
+    Returns
+    -------
+    Tensor
+        Resulted tensor.
+    """
+    batch, channels, length = x.size()
+    # assert (channels % groups == 0)
+    channels_per_group = channels // groups
+    x = x.view(batch, groups, channels_per_group, length)
+    x = torch.transpose(x, 1, 2).contiguous()
+    x = x.view(batch, channels, length)
+    return x
+
+
+class ChannelShuffle(nn.Module):
+    """
+    Channel shuffle layer. This is a wrapper over the same operation. It is designed to save the number of groups.
+    Parameters:
+    ----------
+    channels : int
+        Number of channels.
+    groups : int
+        Number of groups.
+    """
+    def __init__(self,
+                 groups):
+        super(ChannelShuffle, self).__init__()
+        self.groups = groups
+
+    def forward(self, x):
+        return channel_shuffle(x, self.groups)
+
 
 class ShuffleNet(Module):
     def __init__(
@@ -283,7 +325,7 @@ class ShuffleNet(Module):
                     residual_channels, residual_channels, 2**layers, gate_groups
                 )
             )
-            self.shuffle.append(ChannelShuffle(1))
+            self.shuffle.append(ChannelShuffle(residual_groups))
             self.res.append(
                 CausalConv(residual_channels, residual_channels, 1, 1, residual_groups)
             )
@@ -294,11 +336,11 @@ class ShuffleNet(Module):
         self.end_convs = Sequential(
             BatchNorm1d(residual_channels),
             Mish(),
-            ChannelShuffle(1),
+            ChannelShuffle(end_groups),
             CausalConv(residual_channels, end_channels, 1, 1, end_groups),
             BatchNorm1d(end_channels),
             Mish(),
-            ChannelShuffle(1),
+            ChannelShuffle(end_groups),
             CausalConv(end_channels, classes, 1, 1, end_groups),
         )
 
