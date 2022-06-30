@@ -344,8 +344,8 @@ class ShuffleNet(Module):
     def forward(self, x):
         x = self.start_conv(x)
         skip_sum = 0
-        for gate, shuffle, res, skip, bn in zip(
-            self.gate, self.shuffle, self.res, self.skip, self.bn
+        for gate, res, skip, bn in zip(
+            self.gate, self.res, self.skip, self.bn
         ):
             x0 = x
             x = F.mish(gate(x))
