@@ -285,6 +285,11 @@ class ChannelShuffle(nn.Module):
         return channel_shuffle(x, self.groups)
 
 
+def concat_mish(x):
+    assert x.dim() == 3
+    return F.mish(torch.cat((x, -x), dim=1))
+
+
 class ShuffleNet(Module):
     def __init__(
         self,
@@ -299,6 +304,7 @@ class ShuffleNet(Module):
         skip_groups=1,
         end_groups=1,
     ):
+        assert end_groups == 1
         super().__init__()
         self.layers = layers
         self.blocks = blocks
@@ -320,41 +326,48 @@ class ShuffleNet(Module):
         for block, layer in product(range(blocks), range(layers)):
             self.gate.append(
                 CausalConv(
-                    residual_channels, residual_channels, 2, 2**layers, gate_groups
+                    residual_channels,
+                    residual_channels // 2,
+                    2,
+                    2**layers,
+                    gate_groups,
                 )
             )
             self.res.append(
                 CausalConv(residual_channels, residual_channels, 1, 1, residual_groups)
             )
             self.skip.append(
-                CausalConv(residual_channels, skip_channels, 1, 1, skip_groups)
+                CausalConv(residual_channels, skip_channels // 2, 1, 1, skip_groups)
             )
             self.bn.append(BatchNorm1d(residual_channels))
-        self.end_convs = Sequential(
-            BatchNorm1d(residual_channels),
-            Mish(),
-            ChannelShuffle(end_groups),
-            CausalConv(residual_channels, end_channels, 1, 1, end_groups),
-            BatchNorm1d(end_channels),
-            Mish(),
-            ChannelShuffle(end_groups),
-            CausalConv(end_channels, classes, 1, 1, end_groups),
+
+        self.end_bn1 = BatchNorm1d(residual_channels)
+        self.end_conv1 = CausalConv(
+            residual_channels, end_channels // 2, 1, 1, end_groups
         )
+        self.end_bn2 = BatchNorm1d(end_channels // 2)
+        self.end_conv2 = CausalConv(end_channels, classes, 1, 1, end_groups)
 
     def forward(self, x):
         x = self.start_conv(x)
         skip_sum = 0
-        for gate, res, skip, bn in zip(
-            self.gate, self.res, self.skip, self.bn
-        ):
+        for gate, res, skip, bn in zip(self.gate, self.res, self.skip, self.bn):
             x0 = x
-            x = F.mish(gate(x))
+            x = concat_mish(gate(x))
             skip_sum = skip_sum + x
             x = self.residual_shuffle(x)
             x = bn(res(x))
             x = self.residual_shuffle(x)
             x = x0 + x
-        return self.end_convs(x)
+        x = F.mish(
+            self.end_bn1(x)
+        )  # replace this to concat_mish(self.end_bn1(skip_sum))
+        x = concat_mish(self.end_bn2(self.end_conv1(x)))
+        return self.end_conv2(x)
 
     def alt_repr(self):
         return f"ShuffleNet({self.layers}, {self.blocks}, {self.residual_channels}, {self.skip_channels}, {self.end_channels}, {self.classes}, {self.gate_groups}, {self.residual_groups}, {self.skip_groups}, {self.end_groups})"
+
+
+# model = ShuffleNet(10, 4, 256, 512, 256, 256, 16, 16, 16, 1)
+# print(sum(e.numel() for e in model.parameters()))
