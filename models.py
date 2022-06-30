@@ -241,8 +241,8 @@ class GroupNet(Module):
     def alt_repr(self):
         return f"GroupNet({self.layers}, {self.blocks}, {self.residual_channels}, {self.skip_channels}, {self.end_channels}, {self.classes}, {self.gate_groups}, {self.residual_groups}, {self.skip_groups}, {self.end_groups})"
 
-def channel_shuffle(x,
-                    groups):
+
+def channel_shuffle(x, groups):
     """
     Channel shuffle operation from 'ShuffleNet: An Extremely Efficient Convolutional Neural Network for Mobile Devices,'
     https://arxiv.org/abs/1707.01083.
@@ -276,8 +276,8 @@ class ChannelShuffle(nn.Module):
     groups : int
         Number of groups.
     """
-    def __init__(self,
-                 groups):
+
+    def __init__(self, groups):
         super(ChannelShuffle, self).__init__()
         self.groups = groups
 
@@ -311,9 +311,7 @@ class ShuffleNet(Module):
         self.skip_groups = skip_groups
         self.end_groups = end_groups
 
-        self.start_conv = CausalConv(
-            classes, residual_channels, 1, 1, 1, shift=1
-        )
+        self.start_conv = CausalConv(classes, residual_channels, 1, 1, 1, shift=1)
         self.gate = ModuleList()
         self.shuffle = ModuleList()
         self.res = ModuleList()
@@ -358,3 +356,105 @@ class ShuffleNet(Module):
 
     def alt_repr(self):
         return f"ShuffleNet({self.layers}, {self.blocks}, {self.residual_channels}, {self.skip_channels}, {self.end_channels}, {self.classes}, {self.gate_groups}, {self.residual_groups}, {self.skip_groups}, {self.end_groups})"
+
+
+class ChannelRandomShuffle(nn.Module):
+    """
+    Channel shuffle layer. This is a wrapper over the same operation. It is designed to save the number of groups.
+    Parameters:
+    ----------
+    channels : int
+        Number of channels.
+    groups : int
+        Number of groups.
+    """
+
+    def __init__(self, channels):
+        super().__init__()
+        self.channels = channels
+        self.register_buffer("per", torch.randperm(channels))
+        self.register_buffer("inv", torch.empty_like(self.per))
+        self.inv[self.per] = torch.arange(channels)
+
+    def forward(self, x):
+        assert len(x.shape) == 3 and x.size(1) == self.channels
+        return x[:, self.per, :]
+    
+    def backward(self, grad_output):
+        assert len(grad_output.shape) == 3 and grad_output.size(1) == self.channels
+        return grad_output[:, self.inv, :]
+    
+    def extra_repr(self):
+        return f"{self.channels}"
+
+class RandomShuffleNet(Module):
+    def __init__(
+        self,
+        layers=10,
+        blocks=4,
+        residual_channels=32,
+        skip_channels=256,
+        end_channels=256,
+        classes=256,
+        gate_groups=1,
+        residual_groups=1,
+        skip_groups=1,
+        end_groups=1,
+    ):
+        super().__init__()
+        self.layers = layers
+        self.blocks = blocks
+        self.residual_channels = residual_channels
+        self.skip_channels = skip_channels
+        self.end_channels = end_channels
+        self.classes = classes
+        self.gate_groups = gate_groups
+        self.residual_groups = residual_groups
+        self.skip_groups = skip_groups
+        self.end_groups = end_groups
+
+        self.start_conv = CausalConv(classes, residual_channels, 1, 1, 1, shift=1)
+        self.gate = ModuleList()
+        self.shuffle = ModuleList()
+        self.res = ModuleList()
+        self.bn = ModuleList()
+        self.skip = ModuleList()
+        for block, layer in product(range(blocks), range(layers)):
+            self.gate.append(
+                GatedConvBlock(
+                    residual_channels, residual_channels, 2**layers, gate_groups
+                )
+            )
+            self.shuffle.append(ChannelShuffle(residual_channels))
+            self.res.append(
+                CausalConv(residual_channels, residual_channels, 1, 1, residual_groups)
+            )
+            self.skip.append(
+                CausalConv(residual_channels, skip_channels, 1, 1, skip_groups)
+            )
+            self.bn.append(BatchNorm1d(residual_channels))
+        self.end_convs = Sequential(
+            BatchNorm1d(residual_channels),
+            Mish(),
+            ChannelShuffle(residual_channels),
+            CausalConv(residual_channels, end_channels, 1, 1, end_groups),
+            BatchNorm1d(end_channels),
+            Mish(),
+            ChannelShuffle(end_channels),
+            CausalConv(end_channels, classes, 1, 1, end_groups),
+        )
+
+    def forward(self, x):
+        x = self.start_conv(x)
+        skip_sum = 0
+        for gate, shuffle, res, skip, bn in zip(
+            self.gate, self.shuffle, self.res, self.skip, self.bn
+        ):
+            x0 = x
+            x = shuffle(gate(x))
+            skip_sum = skip_sum + x
+            x = x0 + bn(res(x))
+        return self.end_convs(x)
+
+    def alt_repr(self):
+        return f"RandomShuffleNet({self.layers}, {self.blocks}, {self.residual_channels}, {self.skip_channels}, {self.end_channels}, {self.classes}, {self.gate_groups}, {self.residual_groups}, {self.skip_groups}, {self.end_groups})"
