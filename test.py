@@ -9,7 +9,6 @@ from models import (
     AdaptiveBN,
     BatchNorm1d,
     CausalConv,
-    ChannelRandomShuffle,
     ConstantPad1d,
     Conv1d,
     ConvBlock,
@@ -22,7 +21,6 @@ from models import (
     ModuleList,
     Padded,
     Product,
-    RandomShuffleNet,
     Res,
     Sequential,
     ShuffleNet,
@@ -106,14 +104,6 @@ class Representation(unittest.TestCase):
         model = ShuffleNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
         self.help(model)
 
-    def testChannelsRandomShuffle(self):
-        model = ChannelRandomShuffle(10)
-        self.help(model)
-
-    def testRandomShuffleNet(self):
-        model = RandomShuffleNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
-        self.help(model)
-
 class Models(unittest.TestCase):
     def testCausalConv(self):
         model = Sequential(
@@ -183,36 +173,6 @@ class Models(unittest.TestCase):
         x = torch.randn((64, 40, 1000))
         y = model(x)
         self.assertEqual(y.shape, x.shape)
-
-    def testChannelsRandomShuffle(self):
-        model = ChannelRandomShuffle(10)
-        x = torch.randn((64, 10, 1000), requires_grad=True)
-        y = model(x)
-        y.sum().backward()
-        self.assertEqual(y.shape, x.shape)
-        self.assertTrue(torch.allclose(x.grad, torch.ones_like(x)))
-
-    def testSaveChannelsRandomShuffle(self):
-        a = ChannelRandomShuffle(100)
-        b = ChannelRandomShuffle(100)
-        data = a.state_dict()
-        print(data)
-        c = ChannelRandomShuffle(100)
-        c.load_state_dict(data)
-        x = torch.randn((64, 100, 10))
-        y = torch.randn((64, 100, 10))
-        self.assertFalse(torch.allclose(a(x), b(x)))
-        self.assertFalse(torch.allclose(b(x), c(x)))
-        self.assertTrue(torch.allclose(a(x), c(x)))
-        self.assertFalse(torch.allclose(a(x), a(y)))
-        self.assertTrue(torch.allclose(a(y), c(y)))
-
-    def testRandomShuffleNet(self):
-        model = RandomShuffleNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
-        x = torch.randn((64, 40, 1000))
-        y = model(x)
-        self.assertEqual(y.shape, x.shape)
-
 
 class MuLaw(unittest.TestCase):
     def testEncodeDecode(self):

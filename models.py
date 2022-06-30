@@ -278,7 +278,7 @@ class ChannelShuffle(nn.Module):
     """
 
     def __init__(self, groups):
-        super(ChannelShuffle, self).__init__()
+        super().__init__()
         self.groups = groups
 
     def forward(self, x):
@@ -356,7 +356,3 @@ class ShuffleNet(Module):
 
     def alt_repr(self):
         return f"ShuffleNet({self.layers}, {self.blocks}, {self.residual_channels}, {self.skip_channels}, {self.end_channels}, {self.classes}, {self.gate_groups}, {self.residual_groups}, {self.skip_groups}, {self.end_groups})"
-
-
-a = ShuffleNet(10, 4, 256, 512, 256, 256, 16, 16, 16, 1)
-print(sum(e.numel() for e in a.parameters()))
