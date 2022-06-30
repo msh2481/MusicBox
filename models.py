@@ -313,7 +313,7 @@ class ShuffleNet(Module):
 
         self.start_conv = CausalConv(classes, residual_channels, 1, 1, 1, shift=1)
         self.gate = ModuleList()
-        self.shuffle = ModuleList()
+        self.residual_shuffle = ChannelShuffle(residual_groups)
         self.res = ModuleList()
         self.bn = ModuleList()
         self.skip = ModuleList()
@@ -323,7 +323,6 @@ class ShuffleNet(Module):
                     residual_channels, residual_channels, 2, 2**layers, gate_groups
                 )
             )
-            self.shuffle.append(ChannelShuffle(residual_groups))
             self.res.append(
                 CausalConv(residual_channels, residual_channels, 1, 1, residual_groups)
             )
@@ -349,9 +348,12 @@ class ShuffleNet(Module):
             self.gate, self.shuffle, self.res, self.skip, self.bn
         ):
             x0 = x
-            x = shuffle(gate(x))
+            x = F.mish(gate(x))
             skip_sum = skip_sum + x
-            x = x0 + bn(res(x))
+            x = self.residual_shuffle(x)
+            x = bn(res(x))
+            x = self.residual_shuffle(x)
+            x = x0 + x
         return self.end_convs(x)
 
     def alt_repr(self):
