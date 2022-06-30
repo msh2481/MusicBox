@@ -13,6 +13,7 @@ from models import (
     Conv1d,
     ConvBlock,
     GatedConvBlock,
+    GroupNet,
     Identity,
     LeakyReLU,
     Linear,
@@ -94,6 +95,10 @@ class Representation(unittest.TestCase):
         model = WaveNet(3, 2, 10, 20, 30, 40)
         self.help(model)
 
+    def testGroupNet(self):
+        model = GroupNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
+        self.help(model)
+
 
 class Models(unittest.TestCase):
     def testCausalConv(self):
@@ -153,6 +158,12 @@ class Models(unittest.TestCase):
         y = model(x)
         self.assertEqual(y.shape, x.shape)
 
+    def testGroupNet(self):
+        model = GroupNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
+        x = torch.randn((64, 40, 1000))
+        y = model(x)
+        self.assertEqual(y.shape, x.shape)
+
 
 class MuLaw(unittest.TestCase):
     def testEncodeDecode(self):
@@ -162,6 +173,3 @@ class MuLaw(unittest.TestCase):
         x2 = mu_decode(y)
         self.assertEqual(x2.shape, x.shape)
         self.assertTrue(torch.isclose(x, x2).all())
-
-model = WaveNet(3, 2, 10, 20, 30, 40)
-print((model))
