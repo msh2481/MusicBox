@@ -341,9 +341,9 @@ class ShuffleNet(Module):
             )
             self.bn.append(BatchNorm1d(residual_channels))
 
-        self.end_bn1 = BatchNorm1d(residual_channels)
+        self.end_bn1 = BatchNorm1d(skip_channels // 2)
         self.end_conv1 = CausalConv(
-            residual_channels, end_channels // 2, 1, 1, end_groups
+            skip_channels, end_channels // 2, 1, 1, end_groups
         )
         self.end_bn2 = BatchNorm1d(end_channels // 2)
         self.end_conv2 = CausalConv(end_channels, classes, 1, 1, end_groups)
@@ -359,9 +359,7 @@ class ShuffleNet(Module):
             x = bn(res(x))
             x = self.residual_shuffle(x)
             x = x0 + x
-        x = F.mish(
-            self.end_bn1(x)
-        )  # replace this to concat_mish(self.end_bn1(skip_sum))
+        x = concat_mish(self.end_bn1(skip_sum))
         x = concat_mish(self.end_bn2(self.end_conv1(x)))
         return self.end_conv2(x)
 
