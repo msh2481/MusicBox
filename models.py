@@ -322,7 +322,6 @@ class ShuffleNet(Module):
         self.residual_shuffle = ChannelShuffle(residual_groups)
         self.res = ModuleList()
         self.bn = ModuleList()
-        self.skip = ModuleList()
         for block, layer in product(range(blocks), range(layers)):
             self.gate.append(
                 CausalConv(
@@ -336,30 +335,25 @@ class ShuffleNet(Module):
             self.res.append(
                 CausalConv(residual_channels, residual_channels, 1, 1, residual_groups)
             )
-            self.skip.append(
-                CausalConv(residual_channels, skip_channels // 2, 1, 1, skip_groups)
-            )
             self.bn.append(BatchNorm1d(residual_channels))
 
-        self.end_bn1 = BatchNorm1d(skip_channels // 2)
+        self.end_bn1 = BatchNorm1d(residual_channels)
         self.end_conv1 = CausalConv(
-            skip_channels, end_channels // 2, 1, 1, end_groups
+            2 * residual_channels, end_channels // 2, 1, 1, end_groups
         )
         self.end_bn2 = BatchNorm1d(end_channels // 2)
         self.end_conv2 = CausalConv(end_channels, classes, 1, 1, end_groups)
 
     def forward(self, x):
         x = self.start_conv(x)
-        skip_sum = 0
-        for gate, res, skip, bn in zip(self.gate, self.res, self.skip, self.bn):
+        for gate, res, bn in zip(self.gate, self.res, self.bn):
             x0 = x
             x = concat_mish(gate(x))
-            skip_sum = skip_sum + x
             x = self.residual_shuffle(x)
             x = bn(res(x))
             x = self.residual_shuffle(x)
             x = x0 + x
-        x = concat_mish(self.end_bn1(skip_sum))
+        x = concat_mish(self.end_bn1(x))
         x = concat_mish(self.end_bn2(self.end_conv1(x)))
         return self.end_conv2(x)
 
@@ -367,5 +361,5 @@ class ShuffleNet(Module):
         return f"ShuffleNet({self.layers}, {self.blocks}, {self.residual_channels}, {self.skip_channels}, {self.end_channels}, {self.classes}, {self.gate_groups}, {self.residual_groups}, {self.skip_groups}, {self.end_groups})"
 
 
-# model = ShuffleNet(10, 4, 256, 512, 256, 256, 16, 16, 16, 1)
+# model = ShuffleNet(10, 4, 256, 1, 256, 256, 16, 16, 16, 1)
 # print(sum(e.numel() for e in model.parameters()))
