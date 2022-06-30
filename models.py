@@ -359,16 +359,6 @@ class ShuffleNet(Module):
 
 
 class ChannelRandomShuffle(nn.Module):
-    """
-    Channel shuffle layer. This is a wrapper over the same operation. It is designed to save the number of groups.
-    Parameters:
-    ----------
-    channels : int
-        Number of channels.
-    groups : int
-        Number of groups.
-    """
-
     def __init__(self, channels):
         super().__init__()
         self.channels = channels
@@ -379,13 +369,14 @@ class ChannelRandomShuffle(nn.Module):
     def forward(self, x):
         assert len(x.shape) == 3 and x.size(1) == self.channels
         return x[:, self.per, :]
-    
+
     def backward(self, grad_output):
         assert len(grad_output.shape) == 3 and grad_output.size(1) == self.channels
         return grad_output[:, self.inv, :]
-    
+
     def extra_repr(self):
         return f"{self.channels}"
+
 
 class RandomShuffleNet(Module):
     def __init__(
@@ -421,7 +412,7 @@ class RandomShuffleNet(Module):
         self.skip = ModuleList()
         for block, layer in product(range(blocks), range(layers)):
             self.gate.append(
-                GatedConvBlock(
+                CausalConv(
                     residual_channels, residual_channels, 2**layers, gate_groups
                 )
             )
