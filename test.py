@@ -23,6 +23,7 @@ from models import (
     Product,
     Res,
     Sequential,
+    ShuffleNet,
     Sigmoid,
     SkipConnected,
     Sum,
@@ -60,23 +61,23 @@ class Representation(unittest.TestCase):
         self.help(model)
 
     def testCausalConv(self):
-        model = CausalConv(1, 1, 1, 0)
+        model = CausalConv(1, 1, 1, 1)
         self.help(model)
 
     def testConvBlock(self):
-        model = ConvBlock(1, 1, 1, 0)
+        model = ConvBlock(1, 1, 1)
         self.help(model)
 
     def testSum(self):
-        model = Sum(Identity(), ConvBlock(1, 1, 1, 0))
+        model = Sum(Identity(), ConvBlock(1, 1, 1))
         self.help(model)
 
     def testProduct(self):
-        model = Product(Identity(), ConvBlock(1, 1, 1, 0))
+        model = Product(Identity(), ConvBlock(1, 1, 1))
         self.help(model)
 
     def testRes(self):
-        model = Res(ConvBlock(1, 1, 1, 0))
+        model = Res(ConvBlock(1, 1, 1))
         self.help(model)
         opt = torch.optim.Adam(model.parameters(), lr=1)
         x = torch.randn((16, 1, 10))
@@ -97,6 +98,10 @@ class Representation(unittest.TestCase):
 
     def testGroupNet(self):
         model = GroupNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
+        self.help(model)
+
+    def testShuffleNet(self):
+        model = ShuffleNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
         self.help(model)
 
 
@@ -160,6 +165,12 @@ class Models(unittest.TestCase):
 
     def testGroupNet(self):
         model = GroupNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
+        x = torch.randn((64, 40, 1000))
+        y = model(x)
+        self.assertEqual(y.shape, x.shape)
+
+    def testShuffleNet(self):
+        model = ShuffleNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
         x = torch.randn((64, 40, 1000))
         y = model(x)
         self.assertEqual(y.shape, x.shape)
