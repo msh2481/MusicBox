@@ -109,7 +109,7 @@ class Representation(unittest.TestCase):
 class Models(unittest.TestCase):
     def testCausalConv(self):
         model = Sequential(
-            CausalConv(1, 10, 2, 1, shift=1),
+            CausalConv(1, 10, 2, 1),
             Activation(),
             CausalConv(10, 10, 2, 2),
             Activation(),
@@ -125,7 +125,7 @@ class Models(unittest.TestCase):
 
     def testConvBlock(self):
         model = Sequential(
-            ConvBlock(1, 10, 1, shift=1),
+            ConvBlock(1, 10, 1),
             ConvBlock(10, 10, 2),
             ConvBlock(10, 1, 4),
         )
@@ -137,12 +137,12 @@ class Models(unittest.TestCase):
 
     def testSkipConnected(self):
         model = Sequential(
-            ConvBlock(1, 10, 1, shift=1),
+            ConvBlock(1, 10, 1),
             SkipConnected(
                 ConvBlock(10, 10, 2),
                 ConvBlock(10, 10, 4),
             ),
-            ConvBlock(10, 1, 1, shift=1),
+            ConvBlock(10, 1, 1),
         )
         x = torch.randn((64, 1, 10))
 

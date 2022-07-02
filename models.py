@@ -84,31 +84,31 @@ class Sum(nn.Module):
         return self.f(x) + self.g(x)
 
 
-def CausalConv(in_channels, out_channels, kernel_size, dilation, groups=1, shift=0):
+def CausalConv(in_channels, out_channels, kernel_size, dilation, groups=1):
     return Padded(
-        (dilation * (kernel_size - 1) + shift, -shift),
+        (dilation * (kernel_size - 1), 0),
         Conv1d(
             in_channels, out_channels, kernel_size, dilation=dilation, groups=groups
         ),
     )
 
 
-def ConvBlock(in_channels, out_channels, dilation, groups=1, shift=0):
+def ConvBlock(in_channels, out_channels, dilation, groups=1):
     return Sequential(
         Activation(),
-        CausalConv(in_channels, out_channels, 2, dilation, groups, shift),
+        CausalConv(in_channels, out_channels, 2, dilation, groups),
     )
 
 
-def GatedConvBlock(in_channels, out_channels, dilation, groups=1, shift=0):
+def GatedConvBlock(in_channels, out_channels, dilation, groups=1):
     kernel_size = 2
     return Product(
         Sequential(
-            CausalConv(in_channels, out_channels, kernel_size, dilation, groups, shift),
+            CausalConv(in_channels, out_channels, kernel_size, dilation, groups),
             Tanh(),
         ),
         Sequential(
-            CausalConv(in_channels, out_channels, kernel_size, dilation, groups, shift),
+            CausalConv(in_channels, out_channels, kernel_size, dilation, groups),
             Sigmoid(),
         ),
     )
@@ -142,7 +142,7 @@ class WaveNet(Module):
         self.end_channels = end_channels
         self.classes = classes
 
-        self.start_conv = CausalConv(classes, residual_channels, 1, 1, 1, shift=1)
+        self.start_conv = CausalConv(classes, residual_channels, 1, 1, 1)
         self.gate = ModuleList()
         self.res = ModuleList()
         self.bn = ModuleList()
@@ -201,9 +201,7 @@ class GroupNet(Module):
         self.skip_groups = skip_groups
         self.end_groups = end_groups
 
-        self.start_conv = CausalConv(
-            classes, residual_channels, 1, 1, end_groups, shift=1
-        )
+        self.start_conv = CausalConv(classes, residual_channels, 1, 1, end_groups)
         self.gate = ModuleList()
         self.res = ModuleList()
         self.bn = ModuleList()
@@ -317,7 +315,7 @@ class ShuffleNet(Module):
         self.skip_groups = skip_groups
         self.end_groups = end_groups
 
-        self.start_conv = CausalConv(classes, residual_channels, 1, 1, 1, shift=1)
+        self.start_conv = CausalConv(classes, residual_channels, 1, 1, 1)
         self.gate = ModuleList()
         self.residual_shuffle = ChannelShuffle(residual_groups)
         self.res = ModuleList()
@@ -373,14 +371,14 @@ def dilate(x, dilation, init_dilation, pad_start=True):
     [bn, channels, length] = x.size()
     if bn % init_dilation:
         raise RuntimeError(f"bn = {bn}, init_dilation = {init_dilation}")
-    
+
     if dilation == 1:
         # (b * d, c, l) -> (b, c, l * d)
         x = x.permute(1, 2, 0).contiguous()
         x = x.view(channels, length * init_dilation, bn // init_dilation)
         x = x.permute(2, 0, 1).contiguous()
         return x
-    
+
     assert dilation % init_dilation == 0
     dilation_factor = dilation // init_dilation
     if dilation_factor == 1:
@@ -396,9 +394,13 @@ def dilate(x, dilation, init_dilation, pad_start=True):
     bn *= dilation_factor
 
     # reshape according to dilation
-    x = x.permute(1, 2, 0).contiguous()  # -> (channels, old_length, batch_size * init_dilation)
-    x = x.view(channels, length, bn) # -> (channels, new_length, batch_size * dilation)
-    x = x.permute(2, 0, 1).contiguous()  #  -> (batch_size * dilation, channels, new_length)
+    x = x.permute(
+        1, 2, 0
+    ).contiguous()  # -> (channels, old_length, batch_size * init_dilation)
+    x = x.view(channels, length, bn)  # -> (channels, new_length, batch_size * dilation)
+    x = x.permute(
+        2, 0, 1
+    ).contiguous()  #  -> (batch_size * dilation, channels, new_length)
 
     assert x.size(0) % dilation == 0
     return x
@@ -467,33 +469,30 @@ class QueueNet(Module):
         self.end_conv2 = CausalConv(end_channels, classes, 1, 1, 1)
 
     def _forward(self, x, dilate_fn):
-        print('input', x)
         x = self.start_conv(x)
         prev_dilation = 1
-        for i, (block, layer) in enumerate(product(range(self.blocks), range(self.layers))):
-            x, prev_dilation = dilate_fn(x, 2 ** layer, prev_dilation, i), 2 ** layer
+        for i, (block, layer) in enumerate(
+            product(range(self.blocks), range(self.layers))
+        ):
+            x, prev_dilation = dilate_fn(x, 2**layer, prev_dilation, i), 2**layer
             x0 = x
-            print('x0', x0, flush=True)
             x = concat_mish(self.gate[i](x))
             x = self.shuffle(x)
             x = self.bn[i](self.res[i](x))
             x = self.shuffle(x)
             x = x0 + x
-            print('x1', x, flush=True)
         x = concat_mish(self.end_bn1(x))
         x = concat_mish(self.end_bn2(self.end_conv1(x)))
         x = self.end_conv2(x)
-        print('end', x, flush=True)
         return x
 
     def forward(self, x):
         def dilate_fn(x, dilation, init_dilation, i):
             return dilate(x, dilation, init_dilation)
+
         batch_size = x.size(0)
-        # x = F.pad(x, (0, 1))
         x = self._forward(x, dilate_fn)
         x = dilate(x, 1, 2 ** (self.layers - 1))
-        # x = F.pad(x, (-1, 0))
         assert batch_size == x.size(0)
         return x
 
@@ -501,18 +500,20 @@ class QueueNet(Module):
         """
         :param x: Tensor of size (1, C, L) with an one-hot encoding of new data point.
         """
+
         def dilate_fn(x, dilation, init_dilation, i):
             assert x.dim() == 3
             assert x.size(0) == 1
-            x = x[0, :, -1] # or 0?
+            x = x[0, :, -1]  # or 0?
             self.queues[i].push(x.squeeze())
             x = self.queues[i].pop(dilation).unsqueeze(0)
             assert x.dim() == 3
-            assert x.squeeze().dim() == 2 # (C, L)
+            assert x.squeeze().dim() == 2  # (C, L)
             return x
+
         self.eval()
         return self._forward(x.view(1, self.classes, 1), dilate_fn)[0, :, -1]
-    
+
     def reset(self):
         for queue in self.queues:
             queue.reset()

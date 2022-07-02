@@ -2,6 +2,7 @@ from itertools import cycle
 
 import optuna
 import torch
+import torch.nn.functional as F
 from torch import nn
 from tqdm import tqdm
 
@@ -26,7 +27,7 @@ def trainAR(
         ls = []
         for batch_num, (x, info) in enumerate(loader):
             x = x.to(device)
-            aug = x.clone() + torch.randn_like(x) * noise * x.std()
+            aug = F.pad(x, (1, -1)) + torch.randn_like(x) * noise * x.std()
             p = model(aug)
             l, parts = criterion(input=p, target=x)
             optim.zero_grad()
