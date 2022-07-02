@@ -418,11 +418,12 @@ class TensorQueue:
 
     def push(self, x):
         self.data[self.pointer] = x
-        self.front = (self.pointer + 1) % self.length
+        self.pointer = (self.pointer + 1) % self.length
 
     def pop(self, dilation):
         assert dilation < self.length
-        i, j = (self.pointer - dilation) % self.length, self.pointer
+        i = (self.pointer - dilation - 1) % self.length
+        j = (self.pointer - 1) % self.length
         return torch.stack((self.data[i], self.data[j]), dim=1)
 
 
@@ -444,10 +445,10 @@ class QueueNet(Module):
         self.classes = classes
         self.groups = groups
 
-        self.start_conv = CausalConv(classes, res_channels, 1, 1, 1, shift=1)
+        self.start_conv = CausalConv(classes, res_channels, 1, 1, 1)
         self.shuffle = ChannelShuffle(groups)
         self.gate = ModuleList(
-            CausalConv(res_channels, res_channels // 2, 2, 1, groups)
+            CausalConv(res_channels, res_channels // 2, 1, 1, groups)
             for _ in range(layers * blocks)
         )
         self.res = ModuleList(
@@ -466,27 +467,33 @@ class QueueNet(Module):
         self.end_conv2 = CausalConv(end_channels, classes, 1, 1, 1)
 
     def _forward(self, x, dilate_fn):
+        print('input', x)
         x = self.start_conv(x)
         prev_dilation = 1
         for i, (block, layer) in enumerate(product(range(self.blocks), range(self.layers))):
             x, prev_dilation = dilate_fn(x, 2 ** layer, prev_dilation, i), 2 ** layer
             x0 = x
+            print('x0', x0, flush=True)
             x = concat_mish(self.gate[i](x))
             x = self.shuffle(x)
             x = self.bn[i](self.res[i](x))
             x = self.shuffle(x)
             x = x0 + x
+            print('x1', x, flush=True)
         x = concat_mish(self.end_bn1(x))
         x = concat_mish(self.end_bn2(self.end_conv1(x)))
         x = self.end_conv2(x)
+        print('end', x, flush=True)
         return x
 
     def forward(self, x):
         def dilate_fn(x, dilation, init_dilation, i):
             return dilate(x, dilation, init_dilation)
         batch_size = x.size(0)
+        # x = F.pad(x, (0, 1))
         x = self._forward(x, dilate_fn)
-        x = dilate(x, 1, 2 ** self.layers)
+        x = dilate(x, 1, 2 ** (self.layers - 1))
+        # x = F.pad(x, (-1, 0))
         assert batch_size == x.size(0)
         return x
 
@@ -503,8 +510,8 @@ class QueueNet(Module):
             assert x.dim() == 3
             assert x.squeeze().dim() == 2 # (C, L)
             return x
-
-        return self._forward(x.view(1, 256, 1), dilate_fn)[0, :, -1]
+        self.eval()
+        return self._forward(x.view(1, self.classes, 1), dilate_fn)[0, :, -1]
     
     def reset(self):
         for queue in self.queues:

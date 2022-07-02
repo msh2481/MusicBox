@@ -199,13 +199,27 @@ class Models(unittest.TestCase):
 
         self.assertEqual(y.shape, (10 * 128, 256, 500))
 
-    def testDilateContent(self):
+    def testDilateDown(self):
         x = torch.tensor([[[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]])
 
         y = dilate(x, 2, 1)
 
         self.assertTrue(torch.equal(y, torch.tensor([[[1, 3, 5, 7, 9]], [[2, 4, 6, 8, 10]]])))
     
+    def testDilateUp(self):
+        x = torch.tensor([[[1, 3, 5, 7, 9]], [[2, 4, 6, 8, 10]]])
+
+        y = dilate(x, 1, 2)
+
+        self.assertTrue(torch.equal(y, torch.tensor([[[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]])))
+    
+    def testDilateDownWithPadding(self):
+        x = torch.tensor([[[1, 2], [3, 4]]])
+
+        y = dilate(x, 2, 1)
+
+        self.assertTrue(torch.equal(y, torch.tensor([[[1], [3]], [[2], [4]]])))
+
     def testFastForward(self):
         model = QueueNet()
         x = torch.randn((10, 256, 2**13))
@@ -214,7 +228,7 @@ class Models(unittest.TestCase):
 
         self.assertEqual(y.shape, (10, 256, 2**13))
 
-    def testFastGenerate(self):
+    def testFastGenerateShape(self):
         model = QueueNet()
         model.reset()
         x = torch.zeros((256,))
@@ -222,6 +236,18 @@ class Models(unittest.TestCase):
         for i in range(10):
             y = model.generate(x)
             self.assertEqual(y.shape, (256,))
+
+    def testFastGenerateCorrectness(self):
+        model = QueueNet(layers=3, blocks=2)
+        model.reset()
+        h = torch.zeros((256, 1))
+
+        for i in range(10):
+            self.assertEqual(h.shape, (256, 1 + i))
+            y_fast = model.generate(h[:, -1])
+            y_slow = model(h.unsqueeze(0))[0, :, -1]
+            self.assertTrue(torch.allclose(y_fast, y_slow, rtol=1e-3))
+            h = torch.cat((h, y_fast.unsqueeze(1)), dim=1)
 
 class MuLaw(unittest.TestCase):
     def testEncodeDecode(self):
