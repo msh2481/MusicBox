@@ -434,7 +434,7 @@ class QueueNet(Module):
         self,
         layers=10,
         blocks=4,
-        res_channels=32,
+        res_channels=256,
         end_channels=256,
         classes=256,
         groups=1,
@@ -450,7 +450,7 @@ class QueueNet(Module):
         self.start_conv = CausalConv(classes, res_channels, 1, 1, 1)
         self.shuffle = ChannelShuffle(groups)
         self.gate = ModuleList(
-            CausalConv(res_channels, res_channels // 2, 1, 1, groups)
+            CausalConv(res_channels, res_channels // 2, 2, 1, groups)
             for _ in range(layers * blocks)
         )
         self.res = ModuleList(
@@ -476,11 +476,13 @@ class QueueNet(Module):
         ):
             x, prev_dilation = dilate_fn(x, 2**layer, prev_dilation, i), 2**layer
             x0 = x
+            print('x0', x0)
             x = concat_mish(self.gate[i](x))
             x = self.shuffle(x)
             x = self.bn[i](self.res[i](x))
             x = self.shuffle(x)
             x = x0 + x
+            print('x1', x)
         x = concat_mish(self.end_bn1(x))
         x = concat_mish(self.end_bn2(self.end_conv1(x)))
         x = self.end_conv2(x)
@@ -491,6 +493,13 @@ class QueueNet(Module):
             return dilate(x, dilation, init_dilation)
 
         batch_size = x.size(0)
+
+        receptive_field = self.blocks * 2**self.layers
+        padded_size = max(x.size(-1), receptive_field)
+        mult = 2 ** self.layers
+        padded_size = (padded_size + mult - 1) // mult * mult 
+
+        x = F.pad(x, (padded_size - x.size(-1), 0))
         x = self._forward(x, dilate_fn)
         x = dilate(x, 1, 2 ** (self.layers - 1))
         assert batch_size == x.size(0)
@@ -517,6 +526,20 @@ class QueueNet(Module):
     def reset(self):
         for queue in self.queues:
             queue.reset()
+        receptive_field = self.blocks * 2**self.layers
+        for _ in range(receptive_field):
+            self.generate(torch.zeros(self.classes))
 
     def alt_repr(self):
         return f"QueueNet(layers={self.layers}, blocks={self.blocks}, res_channels={self.res_channels}, end_channels={self.end_channels}, classes={self.classes}, groups={self.groups})"
+
+# c = 4
+# model = QueueNet(layers=3, blocks=3, res_channels=c, end_channels=c, classes=c)
+# model.reset()
+# h = torch.zeros((c, 1))
+
+# for i in range(1):
+#     y_fast = model.generate(h[:, -1])
+#     y_slow = model(h.unsqueeze(0))[0, :, -1]
+#     assert(torch.allclose(y_fast, y_slow, rtol=1e-3))
+#     h = torch.cat((h, y_fast.unsqueeze(1)), dim=1)

@@ -14,7 +14,6 @@ from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
 
 from models import *
-from train import generate, trainAR
 
 
 def ensure_download(remote_name, local_name=None):
@@ -188,20 +187,6 @@ class NeptuneLogger(BaseLogger):
 
 def logger(*, console=None, **kwargs):
     return ConsoleLogger(**kwargs) if console else NeptuneLogger(**kwargs)
-
-
-def run(cfg):
-    trainer = eval(cfg["trainer"])
-    m, o, s = model_optim_sched(**cfg)
-    return trainer(
-        loader=dataloader(**cfg),
-        model=m,
-        optim=o,
-        sched=s,
-        criterion=criterion(**cfg),
-        logger=logger(**cfg),
-        **cfg,
-    )
 
 
 def saved_model(run_name, checkpoint, init_with=None, strict=False):

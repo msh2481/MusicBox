@@ -34,7 +34,6 @@ from models import (
     module_description,
 )
 from mu_law import mu_decode, mu_encode
-from train import *
 
 
 class DataLoaders(unittest.TestCase):
