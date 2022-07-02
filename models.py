@@ -476,13 +476,11 @@ class QueueNet(Module):
         ):
             x, prev_dilation = dilate_fn(x, 2**layer, prev_dilation, i), 2**layer
             x0 = x
-            print('x0', x0)
             x = concat_mish(self.gate[i](x))
             x = self.shuffle(x)
             x = self.bn[i](self.res[i](x))
             x = self.shuffle(x)
             x = x0 + x
-            print('x1', x)
         x = concat_mish(self.end_bn1(x))
         x = concat_mish(self.end_bn2(self.end_conv1(x)))
         x = self.end_conv2(x)
@@ -532,14 +530,3 @@ class QueueNet(Module):
 
     def alt_repr(self):
         return f"QueueNet(layers={self.layers}, blocks={self.blocks}, res_channels={self.res_channels}, end_channels={self.end_channels}, classes={self.classes}, groups={self.groups})"
-
-# c = 4
-# model = QueueNet(layers=3, blocks=3, res_channels=c, end_channels=c, classes=c)
-# model.reset()
-# h = torch.zeros((c, 1))
-
-# for i in range(1):
-#     y_fast = model.generate(h[:, -1])
-#     y_slow = model(h.unsqueeze(0))[0, :, -1]
-#     assert(torch.allclose(y_fast, y_slow, rtol=1e-3))
-#     h = torch.cat((h, y_fast.unsqueeze(1)), dim=1)
