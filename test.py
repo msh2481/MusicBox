@@ -21,6 +21,7 @@ from models import (
     ModuleList,
     Padded,
     Product,
+    QueueNet,
     Res,
     Sequential,
     ShuffleNet,
@@ -29,6 +30,7 @@ from models import (
     Sum,
     Tanh,
     WaveNet,
+    dilate,
     module_description,
 )
 from mu_law import mu_decode, mu_encode
@@ -116,7 +118,9 @@ class Models(unittest.TestCase):
             CausalConv(10, 1, 2, 8),
         )
         x = torch.randn((64, 1, 10))
+
         y = model(x)
+
         self.assertEqual(y.shape, x.shape)
 
     def testConvBlock(self):
@@ -126,7 +130,9 @@ class Models(unittest.TestCase):
             ConvBlock(10, 1, 4),
         )
         x = torch.randn((64, 1, 10))
+
         y = model(x)
+
         self.assertEqual(y.shape, x.shape)
 
     def testSkipConnected(self):
@@ -139,13 +145,17 @@ class Models(unittest.TestCase):
             ConvBlock(10, 1, 1, shift=1),
         )
         x = torch.randn((64, 1, 10))
+
         y = model(x)
+
         self.assertEqual(y.shape, x.shape)
 
     def testGatedConvBlock(self):
         model = GatedConvBlock(256, 256, 2)
         x = torch.randn((64, 256, 1000))
+
         y = model(x)
+
         self.assertEqual(y.shape, x.shape)
 
     def testAdaptiveBN(self):
@@ -153,26 +163,65 @@ class Models(unittest.TestCase):
             CausalConv(256, 256, 1, 1), AdaptiveBN(256), CausalConv(256, 256, 1, 1)
         )
         x = torch.randn((64, 256, 10))
+
         y = model(x)
+
         self.assertEqual(y.shape, x.shape)
 
     def testWaveNet(self):
         model = WaveNet(3, 2, 10, 20, 30, 40)
         x = torch.randn((64, 40, 1000))
+
         y = model(x)
+
         self.assertEqual(y.shape, x.shape)
 
     def testGroupNet(self):
         model = GroupNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
         x = torch.randn((64, 40, 1000))
+
         y = model(x)
+
         self.assertEqual(y.shape, x.shape)
 
     def testShuffleNet(self):
         model = ShuffleNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
         x = torch.randn((64, 40, 1000))
+
         y = model(x)
+
         self.assertEqual(y.shape, x.shape)
+
+    def testDilateShape(self):
+        x = torch.randn((10 * 64, 256, 1000))
+
+        y = dilate(x, 128, 64)
+
+        self.assertEqual(y.shape, (10 * 128, 256, 500))
+
+    def testDilateContent(self):
+        x = torch.tensor([[[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]])
+
+        y = dilate(x, 2, 1)
+
+        self.assertTrue(torch.equal(y, torch.tensor([[[1, 3, 5, 7, 9]], [[2, 4, 6, 8, 10]]])))
+    
+    def testFastForward(self):
+        model = QueueNet()
+        x = torch.randn((10, 256, 2**13))
+        
+        y = model(x)
+
+        self.assertEqual(y.shape, (10, 256, 2**13))
+
+    def testFastGenerate(self):
+        model = QueueNet()
+        model.reset()
+        x = torch.zeros((256,))
+
+        for i in range(10):
+            y = model.generate(x)
+            self.assertEqual(y.shape, (256,))
 
 class MuLaw(unittest.TestCase):
     def testEncodeDecode(self):
