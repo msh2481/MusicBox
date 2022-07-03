@@ -29,6 +29,7 @@ from models import (
     Sum,
     Tanh,
     dilate,
+    discretize,
     module_description,
 )
 from mu_law import mu_decode, mu_encode
@@ -229,6 +230,16 @@ class Models(unittest.TestCase):
             y_slow = model(h.unsqueeze(0))[0, :, -1]
             self.assertTrue(torch.allclose(y_fast, y_slow, rtol=1e-3))
             h = torch.cat((h, y_fast.unsqueeze(1)), dim=1)
+
+    def testDiscretizeGradients(self):
+        classes = 256
+        mixtures = 5
+        x = torch.randn((10, 2 * mixtures, 64), requires_grad=True)
+        y = discretize(x, classes, mixtures)
+
+        y.sum().backward()
+
+        self.assertFalse(torch.isnan(x.grad).any())
 
 class MuLaw(unittest.TestCase):
     def testEncodeDecode(self):

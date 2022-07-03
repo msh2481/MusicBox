@@ -349,6 +349,28 @@ class QueueNet(Module):
     def alt_repr(self):
         return f"QueueNet(layers={self.layers}, blocks={self.blocks}, res_channels={self.res_channels}, end_channels={self.end_channels}, classes={self.classes}, groups={self.groups})"
 
+def discretize(x, classes, mixtures):
+    def cdf(x, loc, scale):
+        return torch.sigmoid((x - loc) / scale)
+
+    batch_size, channels, length = x.size()
+    assert channels == 2 * mixtures
+
+    inf = 1e4
+    points = torch.linspace(0, classes, classes, device=x.device)
+    lb, rb = points - 0.5, points + 0.5
+    lb[0], rb[-1] = -inf, +inf
+    lb, rb = lb.view(1, classes, 1, 1), rb.view(1, classes, 1, 1)
+    locs = (128 + x[:, : mixtures, :]).view(
+        batch_size, 1, mixtures, length
+    )
+    scales = 128 * torch.exp(x[:, mixtures :, :]).view(
+        batch_size, 1, mixtures, length
+    )
+    probs = cdf(rb, locs, scales) - cdf(lb, locs, scales)
+    probs = probs.mean(dim=2)
+    probs /= probs.sum(dim=1, keepdim=True)
+    return probs
 
 class MixtureNet(Module):
     def __init__(
@@ -409,30 +431,7 @@ class MixtureNet(Module):
         x = self.end_conv2(x)
         return x
 
-    def _cdf(self, x, loc, scale):
-        return torch.sigmoid((x - loc) / scale)
-
-    def _discrete(self, x):
-        batch_size, channels, length = x.size()
-        assert channels == 2 * self.mixtures
-
-        inf = float("inf")
-        points = torch.linspace(0, self.classes, self.classes, device=x.device)
-        lb, rb = points - 0.5, points + 0.5
-        lb[0], rb[-1] = -inf, +inf
-        lb, rb = lb.view(1, self.classes, 1, 1), rb.view(1, self.classes, 1, 1)
-        locs = (128 + x[:, : self.mixtures, :]).view(
-            batch_size, 1, self.mixtures, length
-        )
-        scales = torch.exp(x[:, self.mixtures :, :]).view(
-            batch_size, 1, self.mixtures, length
-        )
-        probs = self._cdf(rb, locs, scales) - self._cdf(lb, locs, scales)
-        probs = probs.mean(dim=2)
-        probs /= probs.sum(dim=1)
-        return probs
-
-    def forward(self, x):
+    def cont_forward(self, x):
         def dilate_fn(x, dilation, init_dilation, i):
             return dilate(x, dilation, init_dilation)
 
@@ -447,13 +446,12 @@ class MixtureNet(Module):
         x = self._forward(x, dilate_fn)
         x = dilate(x, 1, 2 ** (self.layers - 1))
         assert batch_size == x.size(0)
-        return self._discrete(x)
+        return x
+    
+    def forward(self, x):      
+        return discretize(self.cont_forward(x), self.classes, self.mixtures)
 
-    def generate(self, x):
-        """
-        :param x: Tensor of size (1, C, L) with an one-hot encoding of new data point.
-        """
-
+    def cont_generate(self, x):
         def dilate_fn(x, dilation, init_dilation, i):
             assert x.dim() == 3
             assert x.size(0) == 1
@@ -466,8 +464,12 @@ class MixtureNet(Module):
 
         self.eval()
         x = self._forward(x.view(1, self.classes, 1), dilate_fn)
-        x = self._discrete(x)[0, :, -1]
-        return x
+        return x.squeeze()[:, -1]
+
+    def generate(self, x):
+        return discretize(self.cont_generate(x).view(1, self.classes, 1), self.classes, self.mixtures)
+
+        
 
     def reset(self, show_progress=True):
         for queue in self.queues:
