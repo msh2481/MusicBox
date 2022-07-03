@@ -334,9 +334,11 @@ class QueueNet(Module):
         self.eval()
         return self._forward(x.view(1, self.classes, 1), dilate_fn)[0, :, -1]
 
-    def reset(self):
+    def reset(self, zero_init=True, show_progress=True):
         for queue in self.queues:
             queue.reset()
+        if not zero_init:
+            return
         receptive_field = self.blocks * 2**self.layers
         progress = (
             tqdm(range(receptive_field), desc="Reset")
@@ -349,28 +351,29 @@ class QueueNet(Module):
     def alt_repr(self):
         return f"QueueNet(layers={self.layers}, blocks={self.blocks}, res_channels={self.res_channels}, end_channels={self.end_channels}, classes={self.classes}, groups={self.groups})"
 
+
 def discretize(x, classes, mixtures):
     def cdf(x, loc, scale):
         return torch.sigmoid((x - loc) / scale)
 
     batch_size, channels, length = x.size()
     assert channels == 2 * mixtures
-
-    inf = 1e4
     points = torch.linspace(0, classes, classes, device=x.device)
     lb, rb = points - 0.5, points + 0.5
-    lb[0], rb[-1] = -inf, +inf
     lb, rb = lb.view(1, classes, 1, 1), rb.view(1, classes, 1, 1)
-    locs = (128 + x[:, : mixtures, :]).view(
-        batch_size, 1, mixtures, length
+    locs = (128 + x[:, :mixtures, :]).view(batch_size, 1, mixtures, length)
+    scales = 128 * torch.exp(x[:, mixtures:, :]).view(batch_size, 1, mixtures, length)
+    lprobs = cdf(lb, locs, scales)
+    lprobs = torch.cat(
+        (torch.zeros_like(lprobs[:, :1, :, :]), lprobs[:, 1:, :, :]), dim=1
     )
-    scales = 128 * torch.exp(x[:, mixtures :, :]).view(
-        batch_size, 1, mixtures, length
+    rprobs = cdf(rb, locs, scales)
+    lprobs = torch.cat(
+        (rprobs[:, :-1, :, :], torch.ones_like(rprobs[:, -1:, :, :])), dim=1
     )
-    probs = cdf(rb, locs, scales) - cdf(lb, locs, scales)
-    probs = probs.mean(dim=2)
-    probs /= probs.sum(dim=1, keepdim=True)
+    probs = (rprobs - lprobs).mean(dim=2)
     return probs
+
 
 class MixtureNet(Module):
     def __init__(
@@ -447,15 +450,15 @@ class MixtureNet(Module):
         x = dilate(x, 1, 2 ** (self.layers - 1))
         assert batch_size == x.size(0)
         return x
-    
-    def forward(self, x):      
+
+    def forward(self, x):
         return discretize(self.cont_forward(x), self.classes, self.mixtures)
 
     def cont_generate(self, x):
         def dilate_fn(x, dilation, init_dilation, i):
             assert x.dim() == 3
             assert x.size(0) == 1
-            x = x[0, :, -1]  # or 0?
+            x = x[0, :, -1]
             self.queues[i].push(x.squeeze())
             x = self.queues[i].pop(dilation).unsqueeze(0)
             assert x.dim() == 3
@@ -467,13 +470,17 @@ class MixtureNet(Module):
         return x.squeeze()[:, -1]
 
     def generate(self, x):
-        return discretize(self.cont_generate(x).view(1, self.classes, 1), self.classes, self.mixtures)
+        return discretize(
+            self.cont_generate(x).view(1, 2 * self.mixtures, 1),
+            self.classes,
+            self.mixtures,
+        )
 
-        
-
-    def reset(self, show_progress=True):
+    def reset(self, zero_init=True, show_progress=True):
         for queue in self.queues:
             queue.reset()
+        if not zero_init:
+            return
         receptive_field = self.blocks * 2**self.layers
         progress = (
             tqdm(range(receptive_field), desc="Reset")
