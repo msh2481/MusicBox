@@ -1,4 +1,5 @@
 from itertools import product
+from matplotlib import pyplot as plt
 
 import torch
 import torch.nn.functional as F
@@ -20,6 +21,7 @@ from torch.nn import (
     Softmax,
     Tanh,
 )
+from tqdm import tqdm
 
 
 def module_name(v):
@@ -123,6 +125,7 @@ class Res(nn.Module):
     def forward(self, x):
         return x + self.k * self.f(x)
 
+
 def channel_shuffle(x, groups):
     """
     Channel shuffle operation from 'ShuffleNet: An Extremely Efficient Convolutional Neural Network for Mobile Devices,'
@@ -169,6 +172,7 @@ class ChannelShuffle(nn.Module):
 def concat_mish(x):
     assert x.dim() == 3
     return F.mish(torch.cat((x, -x), dim=1))
+
 
 def dilate(x, dilation, init_dilation, pad_start=True):
     """
@@ -334,11 +338,17 @@ class QueueNet(Module):
         for queue in self.queues:
             queue.reset()
         receptive_field = self.blocks * 2**self.layers
-        for _ in range(receptive_field):
+        progress = (
+            tqdm(range(receptive_field), desc="Reset")
+            if show_progress
+            else range(receptive_field)
+        )
+        for _ in progress:
             self.generate(torch.zeros(self.classes))
 
     def alt_repr(self):
         return f"QueueNet(layers={self.layers}, blocks={self.blocks}, res_channels={self.res_channels}, end_channels={self.end_channels}, classes={self.classes}, groups={self.groups})"
+
 
 class MixtureNet(Module):
     def __init__(
@@ -406,15 +416,21 @@ class MixtureNet(Module):
         batch_size, channels, length = x.size()
         assert channels == 2 * self.mixtures
 
-        inf = 1e4
+        inf = float("inf")
         points = torch.linspace(0, self.classes, self.classes, device=x.device)
         lb, rb = points - 0.5, points + 0.5
         lb[0], rb[-1] = -inf, +inf
         lb, rb = lb.view(1, self.classes, 1, 1), rb.view(1, self.classes, 1, 1)
-        locs = x[:, :self.mixtures, :].view(batch_size, 1, self.mixtures, length)
-        scales = x[:, self.mixtures:, :].view(batch_size, 1, self.mixtures, length)
+        locs = (128 + x[:, : self.mixtures, :]).view(
+            batch_size, 1, self.mixtures, length
+        )
+        scales = torch.exp(x[:, self.mixtures :, :]).view(
+            batch_size, 1, self.mixtures, length
+        )
         probs = self._cdf(rb, locs, scales) - self._cdf(lb, locs, scales)
-        return probs.mean(dim=2)
+        probs = probs.mean(dim=2)
+        probs /= probs.sum(dim=1)
+        return probs
 
     def forward(self, x):
         def dilate_fn(x, dilation, init_dilation, i):
@@ -453,16 +469,22 @@ class MixtureNet(Module):
         x = self._discrete(x)[0, :, -1]
         return x
 
-    def reset(self):
+    def reset(self, show_progress=True):
         for queue in self.queues:
             queue.reset()
         receptive_field = self.blocks * 2**self.layers
-        for _ in range(receptive_field):
+        progress = (
+            tqdm(range(receptive_field), desc="Reset")
+            if show_progress
+            else range(receptive_field)
+        )
+        for _ in progress:
             self.generate(torch.zeros(self.classes))
 
     def alt_repr(self):
         return f"MixtureNet(layers={self.layers}, blocks={self.blocks}, res_channels={self.res_channels}, end_channels={self.end_channels}, classes={self.classes}, groups={self.groups})"
 
+
 # from torchinfo import summary
-# m = MixtureNet(end_channels=1024, groups=16)
+# m = MixtureNet(blocks=2, layers=2, end_channels=1024, groups=16, mixtures=5)
 # print(summary(m, (1, 256, 2 ** 13)))
