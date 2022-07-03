@@ -13,10 +13,10 @@ from models import (
     Conv1d,
     ConvBlock,
     GatedConvBlock,
-    GroupNet,
     Identity,
     LeakyReLU,
     Linear,
+    MixtureNet,
     Module,
     ModuleList,
     Padded,
@@ -24,12 +24,10 @@ from models import (
     QueueNet,
     Res,
     Sequential,
-    ShuffleNet,
     Sigmoid,
     SkipConnected,
     Sum,
     Tanh,
-    WaveNet,
     dilate,
     module_description,
 )
@@ -93,16 +91,12 @@ class Representation(unittest.TestCase):
         model = AdaptiveBN(10)
         self.help(model)
 
-    def testWaveNet(self):
-        model = WaveNet(3, 2, 10, 20, 30, 40)
+    def testQueueNet(self):
+        model = QueueNet()
         self.help(model)
 
-    def testGroupNet(self):
-        model = GroupNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
-        self.help(model)
-
-    def testShuffleNet(self):
-        model = ShuffleNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
+    def testMixtureNet(self):
+        model = MixtureNet()
         self.help(model)
 
 class Models(unittest.TestCase):
@@ -167,30 +161,6 @@ class Models(unittest.TestCase):
 
         self.assertEqual(y.shape, x.shape)
 
-    def testWaveNet(self):
-        model = WaveNet(3, 2, 10, 20, 30, 40)
-        x = torch.randn((64, 40, 1000))
-
-        y = model(x)
-
-        self.assertEqual(y.shape, x.shape)
-
-    def testGroupNet(self):
-        model = GroupNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
-        x = torch.randn((64, 40, 1000))
-
-        y = model(x)
-
-        self.assertEqual(y.shape, x.shape)
-
-    def testShuffleNet(self):
-        model = ShuffleNet(3, 2, 10, 20, 30, 40, 1, 1, 1)
-        x = torch.randn((64, 40, 1000))
-
-        y = model(x)
-
-        self.assertEqual(y.shape, x.shape)
-
     def testDilateShape(self):
         x = torch.randn((10 * 64, 256, 1000))
 
@@ -238,6 +208,18 @@ class Models(unittest.TestCase):
 
     def testFastGenerateCorrectness(self):
         model = QueueNet(layers=3, blocks=2)
+        model.reset()
+        h = torch.zeros((256, 1))
+
+        for i in range(10):
+            self.assertEqual(h.shape, (256, 1 + i))
+            y_fast = model.generate(h[:, -1])
+            y_slow = model(h.unsqueeze(0))[0, :, -1]
+            self.assertTrue(torch.allclose(y_fast, y_slow, rtol=1e-3))
+            h = torch.cat((h, y_fast.unsqueeze(1)), dim=1)
+    
+    def testMixtureFastGenerateCorrectness(self):
+        model = MixtureNet(layers=3, blocks=2)
         model.reset()
         h = torch.zeros((256, 1))
 
