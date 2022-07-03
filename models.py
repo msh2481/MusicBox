@@ -407,7 +407,7 @@ class MixtureNet(Module):
         assert channels == 2 * self.mixtures
 
         inf = 1e4
-        points = torch.linspace(0, self.classes, self.classes)
+        points = torch.linspace(0, self.classes, self.classes, device=x.device)
         lb, rb = points - 0.5, points + 0.5
         lb[0], rb[-1] = -inf, +inf
         lb, rb = lb.view(1, self.classes, 1, 1), rb.view(1, self.classes, 1, 1)
