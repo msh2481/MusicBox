@@ -1,37 +1,29 @@
-import librosa
-import soundfile
 import torch
-import build
-import matplotlib.pyplot as plt
-import numpy as np
-from dct import sdct, isdct
+import torch.nn.functional as F
+from tqdm import tqdm
 
+def beam_search(model, alphabet, beam_size, branch_factor, sample_length, temperature, seed):
+    alphabet, seed_length = seed.size()
+    beam = seed.repeat(beam_size, 1, 1)
+    assert beam.shape == (beam_size, *seed.shape)
+    nll = torch.zeros(beam_size)
 
-def save_audio(filename, spec):
-    # spec = librosa.db_to_amplitude(spec)
-    # S = librosa.feature.inverse.mel_to_audio(mel)
-    S = isdct(spec, frame_step=256)
-    soundfile.write(filename, S, 22050)
+    for iter in tqdm(range(sample_length - seed.size(1))):
+        logits = model(beam)[:, :, -1]
+        assert logits.shape == (beam_size, alphabet)
+        tokens = torch.multinomial(torch.softmax(logits / temperature, dim=-1), branch_factor)
+        logits = F.log_softmax(logits, dim=-1).gather(-1, tokens)
+        tokens, logits = tokens.flatten(), logits.flatten()
+        where = torch.arange(beam_size).repeat_interleave(branch_factor)
+        assert tokens.shape == (beam_size * branch_factor,)
+        assert logits.shape == (beam_size * branch_factor,)
+        assert where.shape == (beam_size * branch_factor,)
 
-
-spec = build.dataset("dataset_v4")[0][0]
-
-
-model = build.saved_model("MUS-247", "model_1.0")
-print(model.z_mean)
-# model.eval()
-
-# code, aux = model.encode(spec.unsqueeze(0))
-# print(code)
-# print(aux)
-
-# spec = model.decode(code, None)
-
-# spec = spec[0][0].detach().numpy()
-# print(spec.shape)
-# plt.imshow(librosa.power_to_db(spec ** 2))
-# plt.show()
-# save_audio('check.wav', spec)
-
-# # y = model.generate().detach().cpu()
-# # save_audio('sample.wav', y.numpy())
+        srt = torch.argsort(logits, descending=True)[:beam_size]
+        one_hot = F.one_hot(tokens[srt], alphabet)
+        assert one_hot.shape == (beam_size, alphabet)
+        beam = torch.cat((beam[where[srt]], one_hot.unsqueeze(2)), dim=2)
+        nll = nll[where[srt]] - logits[srt]
+    
+    idx = nll.argmin()
+    return beam[idx], nll[idx].item()

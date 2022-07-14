@@ -251,6 +251,7 @@ class QueueNet(Module):
         end_channels=256,
         classes=256,
         groups=1,
+        out_classes=None,
     ):
         super().__init__()
         self.layers = layers
@@ -258,28 +259,34 @@ class QueueNet(Module):
         self.res_channels = res_channels
         self.end_channels = end_channels
         self.classes = classes
+        self.out_classes = out_classes or classes
         self.groups = groups
 
-        self.start_conv = CausalConv(classes, res_channels, 1, 1, 1)
-        self.shuffle = ChannelShuffle(groups)
+        self.start_conv = CausalConv(self.classes, self.res_channels, 1, 1, 1)
+        self.shuffle = ChannelShuffle(self.groups)
         self.gate = ModuleList(
-            CausalConv(res_channels, res_channels // 2, 2, 1, groups)
-            for _ in range(layers * blocks)
+            CausalConv(self.res_channels, self.res_channels // 2, 2, 1, self.groups)
+            for _ in range(self.layers * self.blocks)
         )
         self.res = ModuleList(
-            CausalConv(res_channels, res_channels, 1, 1, groups)
-            for _ in range(layers * blocks)
+            CausalConv(self.res_channels, self.res_channels, 1, 1, self.groups)
+            for _ in range(self.layers * self.blocks)
         )
-        self.bn = ModuleList(BatchNorm1d(res_channels) for _ in range(layers * blocks))
+        self.bn = ModuleList(
+            BatchNorm1d(self.res_channels) for _ in range(self.layers * self.blocks)
+        )
 
         self.queues = [
-            TensorQueue(2**layers + 1, res_channels) for _ in range(layers * blocks)
+            TensorQueue(2**self.layers + 1, self.res_channels)
+            for _ in range(self.layers * self.blocks)
         ]
 
-        self.end_bn1 = BatchNorm1d(res_channels)
-        self.end_conv1 = CausalConv(2 * res_channels, end_channels // 2, 1, 1, 1)
-        self.end_bn2 = BatchNorm1d(end_channels // 2)
-        self.end_conv2 = CausalConv(end_channels, classes, 1, 1, 1)
+        self.end_bn1 = BatchNorm1d(self.res_channels)
+        self.end_conv1 = CausalConv(
+            2 * self.res_channels, self.end_channels // 2, 1, 1, 1
+        )
+        self.end_bn2 = BatchNorm1d(self.end_channels // 2)
+        self.end_conv2 = CausalConv(self.end_channels, self.out_classes, 1, 1, 1)
 
     def _forward(self, x, dilate_fn):
         x = self.start_conv(x)
@@ -300,20 +307,23 @@ class QueueNet(Module):
         return x
 
     def forward(self, x):
-        def dilate_fn(x, dilation, init_dilation, i):
+        def fw_dilate_fn(x, dilation, init_dilation, i):
             return dilate(x, dilation, init_dilation)
 
-        batch_size = x.size(0)
+        batch_size, channels, length = x.shape
+        assert channels == self.classes
 
         receptive_field = self.blocks * 2**self.layers
-        padded_size = max(x.size(-1), receptive_field)
+        padded_size = max(length, receptive_field)
         mult = 2**self.layers
         padded_size = (padded_size + mult - 1) // mult * mult
 
-        x = F.pad(x, (padded_size - x.size(-1), 0))
-        x = self._forward(x, dilate_fn)
+        x = F.pad(x, (padded_size - length, 0))
+        x = self._forward(x, fw_dilate_fn)
         x = dilate(x, 1, 2 ** (self.layers - 1))
-        assert batch_size == x.size(0)
+
+        print(x.shape, (batch_size, self.out_classes, padded_size))
+        assert x.shape == (batch_size, self.out_classes, padded_size)
         return x
 
     def generate(self, x):
@@ -321,7 +331,7 @@ class QueueNet(Module):
         :param x: Tensor of size (1, C, L) with an one-hot encoding of new data point.
         """
 
-        def dilate_fn(x, dilation, init_dilation, i):
+        def gen_dilate_fn(x, dilation, init_dilation, i):
             assert x.dim() == 3
             assert x.size(0) == 1
             x = x[0, :, -1]  # or 0?
@@ -332,9 +342,10 @@ class QueueNet(Module):
             return x
 
         self.eval()
-        return self._forward(x.view(1, self.classes, 1), dilate_fn)[0, :, -1]
+        return self._forward(x.view(1, self.classes, 1), gen_dilate_fn)[0, :, -1]
 
     def reset(self, zero_init=True, show_progress=True):
+        self.eval()
         for queue in self.queues:
             queue.reset()
         if not zero_init:
@@ -352,27 +363,42 @@ class QueueNet(Module):
         return f"QueueNet(layers={self.layers}, blocks={self.blocks}, res_channels={self.res_channels}, end_channels={self.end_channels}, classes={self.classes}, groups={self.groups})"
 
 
-def discretize(x, classes, mixtures):
-    def cdf(x, loc, scale):
-        return torch.sigmoid((x - loc) / scale)
+def logistic_cdf(x, loc, scale):
+    return torch.sigmoid((x - loc) / scale)
 
+
+def discretize(x, mixtures, bins):
     batch_size, channels, length = x.size()
     assert channels == 2 * mixtures
-    points = torch.linspace(0, classes, classes, device=x.device)
+    points = torch.linspace(0.5, bins - 0.5, bins, device=x.device)
     lb, rb = points - 0.5, points + 0.5
-    lb, rb = lb.view(1, classes, 1, 1), rb.view(1, classes, 1, 1)
-    locs = (128 + x[:, :mixtures, :]).view(batch_size, 1, mixtures, length)
-    scales = 128 * torch.exp(x[:, mixtures:, :]).view(batch_size, 1, mixtures, length)
-    lprobs = cdf(lb, locs, scales)
+    lb, rb = lb.view(1, bins, 1, 1), rb.view(1, bins, 1, 1)
+    locs = bins * (0.5 + x[:, :mixtures, :]).view(batch_size, 1, mixtures, length)
+    scales = bins * torch.exp(x[:, mixtures:, :]).view(batch_size, 1, mixtures, length)
+    lprobs = logistic_cdf(lb, locs, scales)
     lprobs = torch.cat(
         (torch.zeros_like(lprobs[:, :1, :, :]), lprobs[:, 1:, :, :]), dim=1
     )
-    rprobs = cdf(rb, locs, scales)
-    lprobs = torch.cat(
+    assert lprobs.shape == (batch_size, bins, mixtures, length)
+    rprobs = logistic_cdf(rb, locs, scales)
+    rprobs = torch.cat(
         (rprobs[:, :-1, :, :], torch.ones_like(rprobs[:, -1:, :, :])), dim=1
     )
+    assert rprobs.shape == (batch_size, bins, mixtures, length)
     probs = (rprobs - lprobs).mean(dim=2)
     return probs
+
+
+class LogisticMixture(Module):
+    def __init__(self, mixtures, bins):
+        super().__init__()
+        self.mixtures = mixtures
+        self.bins = bins
+
+    def forward(self, x):
+        batch, in_channels, length = x.shape
+        assert in_channels == 2 * self.mixtures
+        return discretize(x, self.mixtures, self.bins)
 
 
 class MixtureNet(Module):
@@ -387,113 +413,42 @@ class MixtureNet(Module):
         groups=1,
     ):
         super().__init__()
-        self.layers = layers
-        self.blocks = blocks
-        self.res_channels = res_channels
-        self.end_channels = end_channels
-        self.classes = classes
         self.mixtures = mixtures
-        self.groups = groups
-
-        self.start_conv = CausalConv(classes, res_channels, 1, 1, 1)
-        self.shuffle = ChannelShuffle(groups)
-        self.gate = ModuleList(
-            CausalConv(res_channels, res_channels // 2, 2, 1, groups)
-            for _ in range(layers * blocks)
+        self.queue_net = QueueNet(
+            layers, blocks, res_channels, end_channels, classes, groups, 2 * mixtures
         )
-        self.res = ModuleList(
-            CausalConv(res_channels, res_channels, 1, 1, groups)
-            for _ in range(layers * blocks)
-        )
-        self.bn = ModuleList(BatchNorm1d(res_channels) for _ in range(layers * blocks))
-
-        self.queues = [
-            TensorQueue(2**layers + 1, res_channels) for _ in range(layers * blocks)
-        ]
-
-        self.end_bn1 = BatchNorm1d(res_channels)
-        self.end_conv1 = CausalConv(2 * res_channels, end_channels // 2, 1, 1, 1)
-        self.end_bn2 = BatchNorm1d(end_channels // 2)
-        self.end_conv2 = CausalConv(end_channels, 2 * mixtures, 1, 1, 1)
-
-    def _forward(self, x, dilate_fn):
-        x = self.start_conv(x)
-        prev_dilation = 1
-        for i, (block, layer) in enumerate(
-            product(range(self.blocks), range(self.layers))
-        ):
-            x, prev_dilation = dilate_fn(x, 2**layer, prev_dilation, i), 2**layer
-            x0 = x
-            x = concat_mish(self.gate[i](x))
-            x = self.shuffle(x)
-            x = self.bn[i](self.res[i](x))
-            x = self.shuffle(x)
-            x = x0 + x
-        x = concat_mish(self.end_bn1(x))
-        x = concat_mish(self.end_bn2(self.end_conv1(x)))
-        x = self.end_conv2(x)
-        return x
+        self.mixture = LogisticMixture(mixtures, classes)
 
     def cont_forward(self, x):
-        def dilate_fn(x, dilation, init_dilation, i):
-            return dilate(x, dilation, init_dilation)
-
-        batch_size = x.size(0)
-
-        receptive_field = self.blocks * 2**self.layers
-        padded_size = max(x.size(-1), receptive_field)
-        mult = 2**self.layers
-        padded_size = (padded_size + mult - 1) // mult * mult
-
-        x = F.pad(x, (padded_size - x.size(-1), 0))
-        x = self._forward(x, dilate_fn)
-        x = dilate(x, 1, 2 ** (self.layers - 1))
-        assert batch_size == x.size(0)
-        return x
+        return self.queue_net.forward(x)
 
     def forward(self, x):
-        return discretize(self.cont_forward(x), self.classes, self.mixtures)
+        batch, channels, length = x.shape
+        assert channels == self.queue_net.classes
+        return self.mixture(self.cont_forward(x).view(batch, 2 * self.mixtures, -1))
 
     def cont_generate(self, x):
-        def dilate_fn(x, dilation, init_dilation, i):
-            assert x.dim() == 3
-            assert x.size(0) == 1
-            x = x[0, :, -1]
-            self.queues[i].push(x.squeeze())
-            x = self.queues[i].pop(dilation).unsqueeze(0)
-            assert x.dim() == 3
-            assert x.squeeze().dim() == 2  # (C, L)
-            return x
-
-        self.eval()
-        x = self._forward(x.view(1, self.classes, 1), dilate_fn)
-        return x.squeeze()[:, -1]
+        return self.queue_net.generate(x)
 
     def generate(self, x):
-        return discretize(
-            self.cont_generate(x).view(1, 2 * self.mixtures, 1),
-            self.classes,
-            self.mixtures,
-        )
+        (channels,) = x.shape
+        assert channels == self.queue_net.classes
+        return self.mixture(self.cont_generate(x).view(1, 2 * self.mixtures, 1))[
+            0, :, -1
+        ]
 
     def reset(self, zero_init=True, show_progress=True):
-        for queue in self.queues:
-            queue.reset()
-        if not zero_init:
-            return
-        receptive_field = self.blocks * 2**self.layers
-        progress = (
-            tqdm(range(receptive_field), desc="Reset")
-            if show_progress
-            else range(receptive_field)
-        )
-        for _ in progress:
-            self.generate(torch.zeros(self.classes))
+        self.queue_net.reset(zero_init, show_progress)
 
     def alt_repr(self):
-        return f"MixtureNet(layers={self.layers}, blocks={self.blocks}, res_channels={self.res_channels}, end_channels={self.end_channels}, classes={self.classes}, groups={self.groups})"
+        return f"MixtureNet(layers={self.queue_net.layers}, blocks={self.queue_net.blocks}, res_channels={self.queue_net.res_channels}, end_channels={self.queue_net.end_channels}, classes={self.queue_net.classes}, mixtures={self.mixtures}, groups={self.queue_net.groups})"
+
+
+def nll_without_logits(predict, target):
+    p_true = predict * target + (1 - predict) * (1 - target)
+    return -torch.log(p_true).sum(dim=-1).mean()
 
 
 # from torchinfo import summary
-# m = MixtureNet(blocks=2, layers=2, end_channels=1024, groups=16, mixtures=5)
+# m = QueueNet(layers=10, blocks=4, res_channels=256, end_channels=1024, classes=256, groups=1)
 # print(summary(m, (1, 256, 2 ** 13)))
