@@ -322,7 +322,6 @@ class QueueNet(Module):
         x = self._forward(x, fw_dilate_fn)
         x = dilate(x, 1, 2 ** (self.layers - 1))
 
-        print(x.shape, (batch_size, self.out_classes, padded_size))
         assert x.shape == (batch_size, self.out_classes, padded_size)
         return x
 
@@ -445,8 +444,10 @@ class MixtureNet(Module):
 
 
 def nll_without_logits(predict, target):
-    p_true = predict * target + (1 - predict) * (1 - target)
-    return -torch.log(p_true).sum(dim=-1).mean()
+    eps = 1e-9
+    assert predict.shape == target.shape
+    batch, channel, length = predict.shape
+    return (-torch.log(predict + eps) * target).sum(dim=-2).mean()
 
 
 # from torchinfo import summary

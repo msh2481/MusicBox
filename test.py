@@ -282,6 +282,23 @@ class Models(unittest.TestCase):
 
         self.assertFalse(torch.isnan(x.grad).any())
 
+    def testNLL(self):
+        batch = 10
+        mixtures = 2
+        classes = 256
+        length = 1000
+        f = torch.randint(0, classes, (batch, length))
+        y = F.one_hot(f).transpose(1, 2)
+        assert y.shape == (batch, classes, length)
+        x = torch.randn((batch, 2 * mixtures, length))
+        m = LogisticMixture(mixtures, classes)
+        p = m(x)
+        assert p.shape == (batch, classes, length)
+
+        l = nll_without_logits(p, y).item()
+
+        self.assertLess(l, 10)
+        self.assertGreater(l, 1)
 
 class MuLaw(unittest.TestCase):
     def testEncodeDecode(self):
