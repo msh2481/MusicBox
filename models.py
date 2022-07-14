@@ -374,7 +374,7 @@ def discretize(x, mixtures, bins):
     lb, rb = points - 0.5, points + 0.5
     lb, rb = lb.view(1, bins, 1, 1), rb.view(1, bins, 1, 1)
     locs = bins * (0.5 + x[:, :mixtures, :]).view(batch_size, 1, mixtures, length)
-    scales = bins * torch.exp(x[:, mixtures:, :]).view(batch_size, 1, mixtures, length)
+    scales = bins / 10 * torch.exp(x[:, mixtures:, :]).view(batch_size, 1, mixtures, length)
     lprobs = logistic_cdf(lb, locs, scales)
     lprobs = torch.cat(
         (torch.zeros_like(lprobs[:, :1, :, :]), lprobs[:, 1:, :, :]), dim=1
