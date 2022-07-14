@@ -368,12 +368,15 @@ def logistic_cdf(x, loc, scale):
 
 def discretize(x, mixtures, bins):
     batch_size, channels, length = x.size()
-    assert channels == 2 * mixtures
+    assert channels == 3 * mixtures
     points = torch.linspace(0.5, bins - 0.5, bins, device=x.device)
     lb, rb = points - 0.5, points + 0.5
     lb, rb = lb.view(1, bins, 1, 1), rb.view(1, bins, 1, 1)
     locs = bins * (0.5 + x[:, :mixtures, :]).view(batch_size, 1, mixtures, length)
-    scales = bins / 10 * torch.exp(x[:, mixtures:, :]).view(batch_size, 1, mixtures, length)
+    scales = bins / 10 * torch.exp(x[:, mixtures:2*mixtures, :]).view(batch_size, 1, mixtures, length)
+    coefs = x[:, 2*mixtures:, :].view(batch_size, 1, mixtures, length)
+    coefs = F.softmax(coefs, dim=2)
+
     lprobs = logistic_cdf(lb, locs, scales)
     lprobs = torch.cat(
         (torch.zeros_like(lprobs[:, :1, :, :]), lprobs[:, 1:, :, :]), dim=1
@@ -384,7 +387,7 @@ def discretize(x, mixtures, bins):
         (rprobs[:, :-1, :, :], torch.ones_like(rprobs[:, -1:, :, :])), dim=1
     )
     assert rprobs.shape == (batch_size, bins, mixtures, length)
-    probs = (rprobs - lprobs).mean(dim=2)
+    probs = (coefs * (rprobs - lprobs)).sum(dim=2)
     return probs
 
 
@@ -396,7 +399,7 @@ class LogisticMixture(Module):
 
     def forward(self, x):
         batch, in_channels, length = x.shape
-        assert in_channels == 2 * self.mixtures
+        assert in_channels == 3 * self.mixtures
         return discretize(x, self.mixtures, self.bins)
 
 
@@ -414,7 +417,7 @@ class MixtureNet(Module):
         super().__init__()
         self.mixtures = mixtures
         self.queue_net = QueueNet(
-            layers, blocks, res_channels, end_channels, classes, groups, 2 * mixtures
+            layers, blocks, res_channels, end_channels, classes, groups, 3 * mixtures
         )
         self.mixture = LogisticMixture(mixtures, classes)
 
@@ -424,7 +427,7 @@ class MixtureNet(Module):
     def forward(self, x):
         batch, channels, length = x.shape
         assert channels == self.queue_net.classes
-        return self.mixture(self.cont_forward(x).view(batch, 2 * self.mixtures, -1))
+        return self.mixture(self.cont_forward(x).view(batch, 3 * self.mixtures, -1))
 
     def cont_generate(self, x):
         return self.queue_net.generate(x)
@@ -432,7 +435,7 @@ class MixtureNet(Module):
     def generate(self, x):
         (channels,) = x.shape
         assert channels == self.queue_net.classes
-        return self.mixture(self.cont_generate(x).view(1, 2 * self.mixtures, 1))[
+        return self.mixture(self.cont_generate(x).view(1, 3 * self.mixtures, 1))[
             0, :, -1
         ]
 

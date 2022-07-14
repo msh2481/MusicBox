@@ -263,7 +263,7 @@ class Models(unittest.TestCase):
         classes = 10
         length = 64
         model = LogisticMixture(mixtures, classes)
-        x = torch.randn((batch, 2 * mixtures, length), requires_grad=True)
+        x = torch.randn((batch, 3 * mixtures, length), requires_grad=True)
 
         y = model(x).sum(dim=1)
 
@@ -275,7 +275,7 @@ class Models(unittest.TestCase):
         classes = 256
         length = 64
         model = LogisticMixture(mixtures, classes)
-        x = torch.randn((batch, 2 * mixtures, length), requires_grad=True)
+        x = torch.randn((batch, 3 * mixtures, length), requires_grad=True)
         y = model(x)
 
         y.sum().backward()
@@ -290,7 +290,7 @@ class Models(unittest.TestCase):
         f = torch.randint(0, classes, (batch, length))
         y = F.one_hot(f).transpose(1, 2)
         assert y.shape == (batch, classes, length)
-        x = torch.randn((batch, 2 * mixtures, length))
+        x = torch.randn((batch, 3 * mixtures, length))
         m = LogisticMixture(mixtures, classes)
         p = m(x)
         assert p.shape == (batch, classes, length)
