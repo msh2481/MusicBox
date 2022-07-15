@@ -372,8 +372,14 @@ def discretize(x, mixtures, bins):
     points = torch.linspace(0.5, bins - 0.5, bins, device=x.device)
     lb, rb = points - 0.5, points + 0.5
     lb, rb = lb.view(1, bins, 1, 1), rb.view(1, bins, 1, 1)
-    locs = bins * (0.5 + x[:, :mixtures, :]).view(batch_size, 1, mixtures, length)
-    scales = bins / 10 * torch.exp(x[:, mixtures:2*mixtures, :]).view(batch_size, 1, mixtures, length)
+
+    loc_clip = 10.0
+    locs = x[:, :mixtures, :].clamp(-loc_clip, loc_clip)
+    locs = bins * (0.5 + locs).view(batch_size, 1, mixtures, length)
+
+    scale_clip = 10.0
+    scales = x[:, mixtures:2*mixtures, :].clamp(-scale_clip, scale_clip)
+    scales = bins / 10 * torch.exp(scales).view(batch_size, 1, mixtures, length)
     coefs = x[:, 2*mixtures:, :].view(batch_size, 1, mixtures, length)
     coefs = F.softmax(coefs, dim=2)
 
@@ -454,5 +460,5 @@ def nll_without_logits(predict, target):
 
 
 # from torchinfo import summary
-# m = QueueNet(layers=10, blocks=4, res_channels=256, end_channels=1024, classes=256, groups=1)
+# m = MixtureNet(layers=10, blocks=4, res_channels=256, end_channels=1024, classes=256, groups=16)
 # print(summary(m, (1, 256, 2 ** 13)))

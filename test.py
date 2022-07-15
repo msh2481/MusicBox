@@ -282,6 +282,21 @@ class Models(unittest.TestCase):
 
         self.assertFalse(torch.isnan(x.grad).any())
 
+    def testMixtureStability(self):
+        batch = 10
+        mixtures = 5
+        classes = 256
+        length = 64
+        model = LogisticMixture(mixtures, classes)
+        x = torch.randn((batch, 3 * mixtures, length), requires_grad=True)
+        y = model(x * 1e3)
+
+        y.sum().backward()
+
+        self.assertFalse(torch.isnan(x.grad).any())
+        self.assertGreater(x.grad.abs().mean(), 1e-8)
+        self.assertLess(x.grad.abs().mean(), 1e2)
+
     def testNLL(self):
         batch = 10
         mixtures = 2
