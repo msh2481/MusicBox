@@ -310,10 +310,10 @@ class Models(unittest.TestCase):
         p = m(x)
         assert p.shape == (batch, classes, length)
 
-        l = nll_without_logits(p, y).item()
+        loss = nll_without_logits(p, y).item()
 
-        self.assertLess(l, 10)
-        self.assertGreater(l, 1)
+        self.assertLess(loss, 10)
+        self.assertGreater(loss, 1)
 
 class MuLaw(unittest.TestCase):
     def testEncodeDecode(self):
